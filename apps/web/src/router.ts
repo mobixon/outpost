@@ -30,6 +30,8 @@ export function createAppRouter(
     ],
   });
   // Without a session state the server is unreachable; the layout shows a warning instead.
-  if (session !== null) router.beforeEach((to) => redirectFor(to.path, session) ?? true);
+  if (session !== null) {
+    router.beforeEach((to) => redirectFor(to.path, session, to.query['next']) ?? true);
+  }
   return router;
 }

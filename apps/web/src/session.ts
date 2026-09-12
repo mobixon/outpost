@@ -12,17 +12,19 @@ export async function loadSession(): Promise<SessionState | null> {
 
 /**
  * Where to send the user instead of `path`, or null when the page may be shown: first-run setup,
- * then login, then the mandatory two-factor enrollment, then the panel.
+ * then login, then the mandatory two-factor enrollment, then the panel. `next` is the `?next=`
+ * query value of the login page.
  */
-export function redirectFor(path: string, session: SessionState): string | null {
+export function redirectFor(path: string, session: SessionState, next?: unknown): string | null {
   if (session.setupRequired) return path === '/setup' ? null : '/setup';
   if (path === '/setup') return '/';
   if (session.status !== 'active') {
     if (path === '/login') return null;
     return path === '/' ? '/login' : `/login?next=${encodeURIComponent(path)}`;
   }
-  if (path === '/login') return '/';
   if (session.twoFactorEnrollmentRequired) return path === '/account' ? null : '/account';
+  // Signed in on the login page (the page reloads after a login): go on to the requested page.
+  if (path === '/login') return safeNextPath(next);
   return null;
 }
 

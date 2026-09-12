@@ -15,17 +15,14 @@ import {
   Spinner,
 } from '@outpost/ui';
 import { ApiError, apiSend } from '@outpost/web-plugin-api';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute } from 'vue-router';
 import { useErrorMessage } from '../errors.js';
 import AuthLayout from '../layout/AuthLayout.vue';
-import { safeNextPath } from '../session.js';
 import { useShell } from '../shell.js';
 
 const { t } = useI18n();
 const errorMessage = useErrorMessage();
-const route = useRoute();
 const shell = useShell();
 
 // After a reload during the second step, the pending login continues with the code.
@@ -36,7 +33,6 @@ const password = ref('');
 const code = ref('');
 const error = ref<string>();
 const busy = ref(false);
-const next = computed(() => safeNextPath(route.query['next']));
 
 async function run(action: () => Promise<void>): Promise<void> {
   if (busy.value) return;
@@ -55,6 +51,10 @@ async function run(action: () => Promise<void>): Promise<void> {
   }
 }
 
+// Reloading loads the new session and the enabled modules; the router then continues to the
+// page from `?next=` (see redirectFor), so no user-supplied URL is ever assigned here.
+const finish = (): void => window.location.reload();
+
 const submitPassword = () =>
   run(async () => {
     const result = await apiSend(
@@ -65,13 +65,13 @@ const submitPassword = () =>
     );
     password.value = '';
     if (result.status === 'mfa') step.value = 'code';
-    else window.location.assign(next.value);
+    else finish();
   });
 
 const submitCode = () =>
   run(async () => {
     await apiSend('POST', `${API_PREFIX}/auth/login/2fa`, { code: code.value }, loginResultSchema);
-    window.location.assign(next.value);
+    finish();
   });
 
 const startOver = () =>

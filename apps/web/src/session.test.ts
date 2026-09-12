@@ -34,9 +34,14 @@ describe('redirectFor', () => {
     expect(redirectFor('/account', enrolling)).toBeNull();
   });
 
-  it('lets signed-in users through and away from login', () => {
+  it('lets signed-in users through and away from login, to a safe next page', () => {
     expect(redirectFor('/about', state({}))).toBeNull();
     expect(redirectFor('/login', state({}))).toBe('/');
+    expect(redirectFor('/login', state({}), '/about')).toBe('/about');
+    expect(redirectFor('/login', state({}), '//evil.example')).toBe('/');
+    expect(redirectFor('/login', state({ twoFactorEnrollmentRequired: true }), '/about')).toBe(
+      '/account',
+    );
   });
 });
 

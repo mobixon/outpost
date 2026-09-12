@@ -17,7 +17,17 @@ describe.each(targets)('database ($name)', ({ url }) => {
 
   beforeEach(async () => {
     database = createDatabase(url);
-    for (const table of ['test_items', 'plugin_kv', 'outpost_migrations']) {
+    // Every core table, children before parents (foreign keys).
+    const tables = [
+      'test_items',
+      'user_backup_codes',
+      'sessions',
+      'users',
+      'audit_log',
+      'plugin_kv',
+      'outpost_migrations',
+    ];
+    for (const table of tables) {
       await database.db.schema.dropTable(table).ifExists().execute();
     }
   });

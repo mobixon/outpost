@@ -1,4 +1,5 @@
 import cookie from '@fastify/cookie';
+import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import {
   HttpError,
@@ -83,6 +84,13 @@ export async function buildApp(
       transform: jsonSchemaTransform,
     });
     await app.register(cookie);
+    // A general limit per client IP; login and code attempts have stricter limits of their own.
+    await app.register(rateLimit, {
+      max: 600,
+      timeWindow: '1 minute',
+      errorResponseBuilder: (_request, context) =>
+        new HttpError(429, 'rate_limited', `Too many requests. Try again in ${context.after}.`),
+    });
     await registerSecurity(app, config.publicUrl);
 
     await runMigrations(
