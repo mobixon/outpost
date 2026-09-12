@@ -30,6 +30,39 @@ export function createAppRouter(
           { path: '', name: 'home', component: () => import('./pages/HomePage.vue') },
           { path: '/account', name: 'account', component: () => import('./pages/AccountPage.vue') },
           {
+            path: '/servers/:slug',
+            component: () => import('./pages/server/ServerLayout.vue'),
+            children: [
+              {
+                path: '',
+                name: 'server-overview',
+                component: () => import('./pages/server/OverviewTab.vue'),
+              },
+              {
+                path: 'members',
+                name: 'server-members',
+                component: () => import('./pages/server/MembersTab.vue'),
+              },
+              {
+                path: 'audit',
+                name: 'server-audit',
+                component: () => import('./pages/server/AuditTab.vue'),
+              },
+              {
+                path: 'settings',
+                name: 'server-settings',
+                component: () => import('./pages/server/SettingsTab.vue'),
+              },
+              ...plugins.flatMap((plugin) =>
+                (plugin.serverTabs ?? []).map((tab) => ({
+                  path: tab.key,
+                  name: `server-${plugin.id}-${tab.key}`,
+                  component: tab.component,
+                })),
+              ),
+            ],
+          },
+          {
             path: '/admin/users',
             name: 'admin-users',
             component: () => import('./pages/admin/UsersPage.vue'),
@@ -38,6 +71,11 @@ export function createAppRouter(
             path: '/admin/invitations',
             name: 'admin-invitations',
             component: () => import('./pages/admin/InvitationsPage.vue'),
+          },
+          {
+            path: '/admin/audit',
+            name: 'admin-audit',
+            component: () => import('./pages/admin/AuditPage.vue'),
           },
           ...plugins.flatMap((plugin) => plugin.routes ?? []),
           {

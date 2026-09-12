@@ -8,7 +8,11 @@ import type { RouteRecordRaw } from 'vue-router';
 
 export { ApiError, apiFetch, apiSend, onUnauthenticated, type SendMethod } from './api.js';
 export { findMissingMessageKeys, type LocaleMessages } from './messages.js';
+export * from './server.js';
 import type { LocaleMessages } from './messages.js';
+import { RESERVED_SERVER_TAB_KEYS, type ServerTab } from './server.js';
+
+const SERVER_TAB_KEY_PATTERN = /^[a-z][a-z0-9-]*$/;
 
 /** Web plugin API version implemented by this package. */
 export const WEB_PLUGIN_API_VERSION = 1;
@@ -32,6 +36,8 @@ export interface WebPluginDefinition {
   apiVersion: number;
   routes?: RouteRecordRaw[];
   navItems?: NavItem[];
+  /** Tabs on the page of a game server, shown to users with the permission. */
+  serverTabs?: ServerTab[];
   /**
    * Translations per locale; `en` is required and used when a locale is missing. Keep all keys
    * under one top-level key unique to the plugin (e.g. `about`): the messages of all plugins are
@@ -53,6 +59,13 @@ export function defineWebPlugin<T extends WebPluginDefinition>(plugin: T): T {
     throw new WebPluginDefinitionError(
       `Web plugin "${plugin.id}" targets web plugin API v${plugin.apiVersion}, but this Outpost supports v${WEB_PLUGIN_API_VERSION}`,
     );
+  }
+  for (const tab of plugin.serverTabs ?? []) {
+    if (!SERVER_TAB_KEY_PATTERN.test(tab.key) || RESERVED_SERVER_TAB_KEYS.includes(tab.key)) {
+      throw new WebPluginDefinitionError(
+        `Web plugin "${plugin.id}" has an invalid or reserved server tab key "${tab.key}"`,
+      );
+    }
   }
   return plugin;
 }

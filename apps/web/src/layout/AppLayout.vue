@@ -17,20 +17,30 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from '@outpost/ui';
-import { ref, watch } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterView, useRoute } from 'vue-router';
 import SudoDialog from '../account/SudoDialog.vue';
 import { storeLocale, SUPPORTED_LOCALES, type AppLocale } from '../i18n.js';
+import { loadServers } from '../servers.js';
 import { useShell } from '../shell.js';
 import { themeMode, type ThemeMode } from '../theme/mode.js';
 import FlashMessage from './FlashMessage.vue';
 import NavList from './NavList.vue';
+import ServerNav from './ServerNav.vue';
 import UserMenu from './UserMenu.vue';
 
 const shell = useShell();
 const { t, locale } = useI18n();
 const route = useRoute();
+
+onMounted(() => {
+  const session = shell.session;
+  if (session?.status === 'active' && !session.twoFactorEnrollmentRequired) {
+    // The sidebar lists the servers; pages show their own errors when this fails.
+    loadServers().catch(() => undefined);
+  }
+});
 
 const menuOpen = ref(false);
 watch(
@@ -70,6 +80,7 @@ function setLocale(value: unknown): void {
       </div>
       <div class="px-3">
         <NavList :items="shell.navItems" />
+        <ServerNav />
       </div>
     </aside>
 
@@ -84,6 +95,7 @@ function setLocale(value: unknown): void {
         </SheetHeader>
         <div class="px-3">
           <NavList :items="shell.navItems" />
+          <ServerNav />
         </div>
       </SheetContent>
     </Sheet>

@@ -1,7 +1,7 @@
 import type { SessionState } from '@outpost/shared';
 import { defineWebPlugin, WEB_PLUGIN_API_VERSION } from '@outpost/web-plugin-api';
 import { describe, expect, it } from 'vitest';
-import { buildNavItems } from './shell.js';
+import { buildNavItems, buildServerTabs } from './shell.js';
 
 const TestIcon = { name: 'TestIcon', render: () => null };
 
@@ -53,7 +53,51 @@ describe('buildNavItems', () => {
       'core.home',
       'core.users',
       'core.invitations',
+      'core.audit',
     ]);
     expect(buildNavItems([], session(false)).map((item) => item.id)).toEqual(['core.home']);
+  });
+});
+
+describe('buildServerTabs', () => {
+  it('collects the server tabs of the plugins', () => {
+    const plugin = defineWebPlugin({
+      id: 'test.console',
+      apiVersion: WEB_PLUGIN_API_VERSION,
+      serverTabs: [
+        {
+          key: 'console',
+          label: 'console.tab',
+          icon: TestIcon,
+          component: TestIcon,
+          permission: 'console.read',
+          capability: 'logs.stream',
+          order: 100,
+        },
+      ],
+    });
+    expect(buildServerTabs([plugin])).toEqual([
+      {
+        id: 'test.console.console',
+        key: 'console',
+        label: 'console.tab',
+        icon: TestIcon,
+        permission: 'console.read',
+        capability: 'logs.stream',
+        order: 100,
+      },
+    ]);
+  });
+
+  it('rejects reserved tab keys', () => {
+    expect(() =>
+      defineWebPlugin({
+        id: 'test.evil',
+        apiVersion: WEB_PLUGIN_API_VERSION,
+        serverTabs: [
+          { key: 'members', label: 'x', icon: TestIcon, component: TestIcon, permission: 'x.y' },
+        ],
+      }),
+    ).toThrow(/reserved server tab key/);
   });
 });

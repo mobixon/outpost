@@ -6,7 +6,7 @@ import { createAppI18n } from './i18n.js';
 import { loadEnabledPlugins } from './plugins.js';
 import { createAppRouter } from './router.js';
 import { loadSession } from './session.js';
-import { buildNavItems, shellKey } from './shell.js';
+import { buildNavItems, buildServerTabs, shellKey } from './shell.js';
 import { initThemeMode } from './theme/mode.js';
 
 async function bootstrap(): Promise<void> {
@@ -24,7 +24,11 @@ async function bootstrap(): Promise<void> {
   createApp(App)
     .use(createAppI18n(plugins))
     .use(createAppRouter(plugins, session))
-    .provide(shellKey, { navItems: buildNavItems(plugins, signedIn ? session : null), session })
+    .provide(shellKey, {
+      navItems: buildNavItems(plugins, signedIn ? session : null),
+      serverTabs: buildServerTabs(plugins),
+      session,
+    })
     .mount('#app');
 }
 

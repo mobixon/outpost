@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import type { ServerRouteDefinition, ServerRouteSchema } from './servers.js';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -19,14 +20,16 @@ export interface RouteSchema {
   response?: z.ZodType;
 }
 
-type Parsed<S extends RouteSchema, K extends keyof RouteSchema> = S[K] extends z.ZodType
-  ? z.output<S[K]>
-  : undefined;
+/** The validated value of one part of a request. */
+export type SchemaOutput<
+  S extends RouteSchema,
+  K extends keyof RouteSchema,
+> = S[K] extends z.ZodType ? z.output<S[K]> : undefined;
 
 export interface RouteRequest<S extends RouteSchema, A extends RouteAccess = 'user'> {
-  params: Parsed<S, 'params'>;
-  query: Parsed<S, 'querystring'>;
-  body: Parsed<S, 'body'>;
+  params: SchemaOutput<S, 'params'>;
+  query: SchemaOutput<S, 'querystring'>;
+  body: SchemaOutput<S, 'body'>;
   /** The signed-in user. Public routes get `undefined` for anonymous callers. */
   user: A extends 'public' ? AuthenticatedUser | undefined : AuthenticatedUser;
   /** Client IP address (behind a reverse proxy only with OUTPOST_TRUST_PROXY). */
@@ -49,7 +52,10 @@ export interface RouteDefinition<S extends RouteSchema, A extends RouteAccess = 
 }
 
 export interface HttpRegistry {
+  /** A route under `/api/v1/plugins/<plugin id>`. */
   route<S extends RouteSchema, A extends RouteAccess = 'user'>(route: RouteDefinition<S, A>): void;
+  /** A route of one game server, with permission and capability checks. */
+  serverRoute<S extends ServerRouteSchema>(route: ServerRouteDefinition<S>): void;
 }
 
 /** Throw from a route handler to answer with a specific status code and error code. */

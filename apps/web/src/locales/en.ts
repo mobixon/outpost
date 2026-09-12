@@ -11,6 +11,8 @@ export default {
     signOut: 'Sign out',
     users: 'Users',
     invitations: 'Invitations',
+    servers: 'Servers',
+    audit: 'Audit log',
   },
   shell: {
     apiUnavailable: 'The Outpost server is not reachable. Some features are unavailable.',
@@ -56,6 +58,8 @@ export default {
     text: '{by} invited you. Choose a username, then set a password or sign in with an external account.',
     textAdmin:
       '{by} invited you as an administrator. Choose a username, then set a password or sign in with an external account.',
+    textServer:
+      '{by} invited you to the server {server} as {role}. Choose a username, then set a password or sign in with an external account.',
     someone: 'An administrator',
     validUntil: 'The invitation is valid until {date}.',
     invalidTitle: 'Invitation not valid',
@@ -75,7 +79,7 @@ export default {
       'Administrators must use two-factor authentication. Turn it on to continue.',
     profile: 'Profile',
     role: 'Role',
-    superadmin: 'Administrator',
+    superadmin: 'Superadmin',
     user: 'User',
     memberSince: 'Member since',
     password: {
@@ -173,6 +177,10 @@ export default {
       title: 'Invitations',
       newTitle: 'New invitation',
       newText: 'An invitation link creates one account. Send it to the person you invite.',
+      account: 'Account',
+      server: 'Server',
+      noServer: 'No server',
+      serverRole: 'Role on the server',
       validFor: 'Valid for',
       days1: '1 day',
       days7: '7 days',
@@ -227,11 +235,108 @@ export default {
     last_login_method:
       'Set a password or link another account first, otherwise you could not sign in anymore.',
     password_required: 'Confirm with your password.',
+    not_found: 'It does not exist or was deleted.',
+    slug_taken: 'Another server already uses this short name.',
+    user_not_found: 'There is no user with this name.',
+    already_member: 'This user is already a member.',
+    role_not_allowed: 'You cannot manage members with this role.',
+    capability_missing: 'This server does not support that yet.',
+    invalid_cursor: 'Reload the page and try again.',
   },
   home: {
     title: 'Game servers',
+    add: 'Add server',
     emptyTitle: 'No game servers yet',
-    emptyText: 'Connecting game servers arrives in an upcoming version of Outpost.',
+    emptyAdmin: 'Add a server to manage it and its team with Outpost.',
+    emptyMember:
+      'You are not a member of any server yet. Ask an administrator of the server for an invitation.',
+    notConnected: 'Not connected',
+  },
+  roles: {
+    owner: 'Owner',
+    admin: 'Admin',
+    moderator: 'Moderator',
+    viewer: 'Viewer',
+  },
+  // Descriptions of the core permissions; modules describe their own.
+  permissions: {
+    server: {
+      view: 'See the server',
+      manage: 'Rename and delete the server',
+    },
+    members: {
+      manage: 'Manage members and invite people',
+    },
+    audit: {
+      view: 'Read the audit log of the server',
+    },
+  },
+  servers: {
+    add: {
+      title: 'Add a server',
+      text: 'Connecting it to Docker and RCON arrives with the connection wizard in an upcoming version of Outpost. You can already set up its team.',
+      name: 'Name',
+      slug: 'Short name',
+      slugHint: 'Used in addresses: lowercase letters, digits and dashes.',
+      submit: 'Add server',
+    },
+    notFoundTitle: 'Server not found',
+    notFoundText: 'The server does not exist or you are not a member.',
+    noAccess: 'You do not have access to this page.',
+    tabsLabel: 'Server pages',
+    tabs: {
+      overview: 'Overview',
+      members: 'Members',
+      audit: 'Audit log',
+      settings: 'Settings',
+    },
+    overview: {
+      connection: 'Connection',
+      notConnected:
+        'This server is not connected yet. Connecting servers through Docker, RCON and file access arrives with the connection wizard in an upcoming version of Outpost.',
+      access: 'Your access',
+      youCan: 'You can:',
+    },
+    members: {
+      title: 'Members',
+      empty: 'No members yet.',
+      added: 'Added',
+      changeRole: 'Role of {username}',
+      remove: 'Remove {username}',
+      add: 'Add a member',
+      addText: 'Add someone who already has an Outpost account, by their exact username.',
+      addSubmit: 'Add',
+      inviteTitle: 'Invite',
+      inviteText:
+        'Someone without an account gets an invitation link, creates an account with it and joins the server with the chosen role.',
+    },
+    settings: {
+      title: 'General',
+      save: 'Save',
+      saved: 'Saved.',
+      dangerTitle: 'Delete the server',
+      dangerText:
+        'Removes the server from Outpost with its members and invitations. The game server itself is not touched, and the audit log keeps its entries.',
+      delete: 'Delete server',
+      deleteTitle: 'Delete {name}?',
+    },
+  },
+  audit: {
+    title: 'Audit log',
+    time: 'Time',
+    user: 'User',
+    server: 'Server',
+    action: 'Action',
+    details: 'Details',
+    ip: 'IP address',
+    filterAction: 'Action starts with',
+    allServers: 'All servers',
+    apply: 'Filter',
+    more: 'Load more',
+    empty: 'No entries.',
+    system: 'system',
+    deletedUser: 'deleted user',
+    deletedServer: 'deleted server',
   },
   notFound: {
     title: 'Page not found',

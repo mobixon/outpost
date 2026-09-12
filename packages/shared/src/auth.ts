@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { roleKeySchema } from './servers.js';
 
 /** Header every state-changing API request must carry, with the value `1` (CSRF protection). */
 export const CSRF_HEADER = 'x-outpost-request';
@@ -159,6 +160,9 @@ export const identityListSchema = z.object({
 /** What the invitation page shows before the invitation is accepted. */
 export const invitationPreviewSchema = z.object({
   isSuperadmin: z.boolean(),
+  /** The server the invitation makes the person a member of, with this role. */
+  serverName: z.string().nullable(),
+  role: roleKeySchema.nullable(),
   invitedBy: z.string().nullable(),
   expiresAt: z.string(),
 });

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { CheckIcon, CopyIcon, Trash2Icon } from '@lucide/vue';
+import { Trash2Icon } from '@lucide/vue';
 import {
   API_PREFIX,
   INVITATION_LIFETIMES_DAYS,
   invitationCreatedSchema,
   invitationListSchema,
+  ROLE_KEYS,
   type InvitationInfo,
 } from '@outpost/shared';
 import {
@@ -39,13 +40,21 @@ import { onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { SudoCancelled, withSudo } from '../../account/sudo.js';
 import { useErrorMessage } from '../../errors.js';
+import InvitationLink from '../../invitations/InvitationLink.vue';
+import { loadServers, servers } from '../../servers.js';
 
+const NO_SERVER = 'none';
 const { t, locale } = useI18n();
 const errorMessage = useErrorMessage();
 const invitations = ref<InvitationInfo[]>([]);
-const form = reactive({ role: 'user', days: '7', note: '' });
+const form = reactive({
+  account: 'user',
+  days: '7',
+  note: '',
+  server: NO_SERVER,
+  serverRole: 'viewer',
+});
 const link = ref<string | null>(null);
-const copied = ref(false);
 const error = ref<string>();
 const busy = ref(false);
 
@@ -76,30 +85,20 @@ const create = () =>
         'POST',
         `${API_PREFIX}/invitations`,
         {
-          isSuperadmin: form.role === 'superadmin',
+          isSuperadmin: form.account === 'superadmin',
           expiresInDays: Number(form.days),
           ...(form.note.trim() !== '' && { note: form.note.trim() }),
+          ...(form.server !== NO_SERVER && { serverId: form.server, role: form.serverRole }),
         },
         invitationCreatedSchema,
       ),
     );
     link.value = created.url;
-    copied.value = false;
     form.note = '';
   });
 
 const remove = (invitation: InvitationInfo) =>
   run(() => apiSend('DELETE', `${API_PREFIX}/invitations/${encodeURIComponent(invitation.id)}`));
-
-async function copy(): Promise<void> {
-  if (link.value === null) return;
-  try {
-    await navigator.clipboard.writeText(link.value);
-    copied.value = true;
-  } catch {
-    // The clipboard needs HTTPS; the link stays visible for copying by hand.
-  }
-}
 
 const statusVariant = (status: InvitationInfo['status']) =>
   status === 'pending' ? 'default' : status === 'used' ? 'secondary' : 'outline';
@@ -107,7 +106,7 @@ const formatTime = (iso: string) =>
   new Date(iso).toLocaleString(locale.value, { dateStyle: 'medium', timeStyle: 'short' });
 
 onMounted(() => {
-  load().catch((err: unknown) => {
+  Promise.all([load(), loadServers()]).catch((err: unknown) => {
     error.value = errorMessage(err);
   });
 });
@@ -124,16 +123,45 @@ onMounted(() => {
       </CardHeader>
       <CardContent class="flex flex-col gap-4">
         <form class="flex flex-col gap-4" @submit.prevent="create">
-          <FieldGroup class="grid gap-4 sm:grid-cols-3">
+          <FieldGroup class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field>
-              <FieldLabel for="invitation-role">{{ t('account.role') }}</FieldLabel>
-              <Select v-model="form.role">
-                <SelectTrigger id="invitation-role" class="w-full">
+              <FieldLabel for="invitation-account">{{ t('admin.invitations.account') }}</FieldLabel>
+              <Select v-model="form.account">
+                <SelectTrigger id="invitation-account" class="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="user">{{ t('account.user') }}</SelectItem>
                   <SelectItem value="superadmin">{{ t('account.superadmin') }}</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel for="invitation-server">{{ t('admin.invitations.server') }}</FieldLabel>
+              <Select v-model="form.server">
+                <SelectTrigger id="invitation-server" class="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem :value="NO_SERVER">{{ t('admin.invitations.noServer') }}</SelectItem>
+                  <SelectItem v-for="server in servers ?? []" :key="server.id" :value="server.id">
+                    {{ server.name }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel for="invitation-server-role">{{
+                t('admin.invitations.serverRole')
+              }}</FieldLabel>
+              <Select v-model="form.serverRole" :disabled="form.server === NO_SERVER">
+                <SelectTrigger id="invitation-server-role" class="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem v-for="role in ROLE_KEYS" :key="role" :value="role">
+                    {{ t(`roles.${role}`) }}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </Field>
@@ -154,7 +182,7 @@ onMounted(() => {
                 </SelectContent>
               </Select>
             </Field>
-            <Field>
+            <Field class="lg:col-span-2">
               <FieldLabel for="invitation-note">{{ t('admin.invitations.note') }}</FieldLabel>
               <Input
                 id="invitation-note"
@@ -170,26 +198,7 @@ onMounted(() => {
           </Button>
         </form>
 
-        <Alert v-if="link" data-testid="invitation-created">
-          <AlertDescription class="flex flex-col gap-3">
-            <span>{{ t('admin.invitations.created') }}</span>
-            <div class="flex gap-2">
-              <Input
-                :model-value="link"
-                readonly
-                class="font-mono"
-                data-testid="invitation-link"
-                :aria-label="t('admin.invitations.link')"
-                @focus="($event.target as HTMLInputElement).select()"
-              />
-              <Button variant="outline" @click="copy">
-                <CheckIcon v-if="copied" />
-                <CopyIcon v-else />
-                {{ copied ? t('account.twoFactor.copied') : t('account.twoFactor.copy') }}
-              </Button>
-            </div>
-          </AlertDescription>
-        </Alert>
+        <InvitationLink v-if="link" :link="link" />
       </CardContent>
     </Card>
 
@@ -209,13 +218,14 @@ onMounted(() => {
           <TableHeader>
             <TableRow>
               <TableHead>{{ t('admin.invitations.note') }}</TableHead>
-              <TableHead>{{ t('account.role') }}</TableHead>
+              <TableHead>{{ t('admin.invitations.account') }}</TableHead>
+              <TableHead>{{ t('admin.invitations.server') }}</TableHead>
               <TableHead>{{ t('admin.invitations.status') }}</TableHead>
               <TableHead>{{ t('admin.invitations.created2') }}</TableHead>
               <TableHead>{{ t('admin.invitations.expires') }}</TableHead>
-              <TableHead class="w-12"
-                ><span class="sr-only">{{ t('admin.actions') }}</span></TableHead
-              >
+              <TableHead class="w-12">
+                <span class="sr-only">{{ t('admin.actions') }}</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -224,6 +234,12 @@ onMounted(() => {
               <TableCell>{{
                 invitation.isSuperadmin ? t('account.superadmin') : t('account.user')
               }}</TableCell>
+              <TableCell>
+                <template v-if="invitation.serverName && invitation.role">
+                  {{ invitation.serverName }} · {{ t(`roles.${invitation.role}`) }}
+                </template>
+                <template v-else>—</template>
+              </TableCell>
               <TableCell>
                 <div class="flex flex-col items-start gap-1">
                   <Badge :variant="statusVariant(invitation.status)">

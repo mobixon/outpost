@@ -24,9 +24,14 @@ import {
 import { hashPassword, passwordProblem } from '../auth/password.js';
 import type { AuthService } from '../auth/service.js';
 
-const DAY_MS = 24 * 60 * 60_000;
+export const DAY_MS = 24 * 60 * 60_000;
 
-/** Invitation links: managed by superadmins, opened and accepted by the invited person. */
+export const invitationUrl = (publicUrl: string, token: string) => `${publicUrl}/invite/${token}`;
+
+/**
+ * Invitation links: opened and accepted by the invited person, managed by superadmins here and by
+ * server managers under /servers/:id/invitations.
+ */
 export function registerInvitationRoutes(fastify: FastifyInstance, auth: AuthService): void {
   const app = fastify.withTypeProvider<ZodTypeProvider>();
   const tokenParams = z.object({ token: invitationTokenSchema });
@@ -42,6 +47,8 @@ export function registerInvitationRoutes(fastify: FastifyInstance, auth: AuthSer
       if (invitation === undefined) throw invalid();
       return {
         isSuperadmin: invitation.is_superadmin === 1,
+        serverName: invitation.server_name,
+        role: invitation.role_key,
         invitedBy: invitation.created_by_username,
         expiresAt: new Date(invitation.expires_at).toISOString(),
       };
@@ -83,8 +90,10 @@ export function registerInvitationRoutes(fastify: FastifyInstance, auth: AuthSer
       await auth.audit.record({
         action: 'auth.invitation_accepted',
         userId: user.id,
+        serverId: invitation.server_id,
         target: invitation.id,
         ip: request.ip,
+        ...(invitation.role_key !== null && { details: { role: invitation.role_key } }),
       });
       const status = await auth.signIn(request, reply, user, { method: 'invitation' });
       return reply.code(201).send({ status });
@@ -104,23 +113,41 @@ export function registerInvitationRoutes(fastify: FastifyInstance, auth: AuthSer
     { schema: { tags, body: invitationCreateSchema, response: { 201: invitationCreatedSchema } } },
     async (request, reply) => {
       const { user } = auth.requireSuperadmin(request, { sudo: true });
-      const { isSuperadmin, expiresInDays, note } = request.body;
+      const { isSuperadmin, expiresInDays, note, serverId, role } = request.body;
+      const server =
+        serverId === undefined
+          ? undefined
+          : await auth.db
+              .selectFrom('servers')
+              .select(['id', 'name'])
+              .where('id', '=', serverId)
+              .executeTakeFirst();
+      if (serverId !== undefined && server === undefined) {
+        throw new HttpError(404, 'not_found', 'No such server');
+      }
       const { token, invitation } = await createInvitation(auth.db, {
         createdBy: user.id,
         isSuperadmin,
         note: note || null,
         lifetimeMs: expiresInDays * DAY_MS,
+        serverId: server?.id ?? null,
+        role: role ?? null,
       });
       await auth.audit.record({
         action: 'admin.invitation_created',
         userId: user.id,
+        serverId: server?.id ?? null,
         target: invitation.id,
         ip: request.ip,
-        details: { isSuperadmin, expiresInDays },
+        details: { isSuperadmin, expiresInDays, ...(role !== undefined && { role }) },
       });
       return reply.code(201).send({
-        invitation: toInvitationInfo(invitation, user.username, null),
-        url: `${auth.config.publicUrl}/invite/${token}`,
+        invitation: toInvitationInfo(invitation, {
+          createdBy: user.username,
+          usedBy: null,
+          serverName: server?.name ?? null,
+        }),
+        url: invitationUrl(auth.config.publicUrl, token),
       });
     },
   );

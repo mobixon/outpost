@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { roleKeySchema } from './servers.js';
 
-// Instance administration: user accounts and invitations (superadmins only).
+// Instance administration: user accounts and invitations.
 
 export const adminUserSchema = z.object({
   id: z.string(),
@@ -33,16 +34,37 @@ export const adminUserUpdateSchema = z
 export const INVITATION_LIFETIMES_DAYS = [1, 7, 30] as const;
 export type InvitationLifetime = (typeof INVITATION_LIFETIMES_DAYS)[number];
 
-export const invitationCreateSchema = z.object({
-  isSuperadmin: z.boolean(),
+const invitationFields = {
   expiresInDays: z.literal(INVITATION_LIFETIMES_DAYS),
   /** Reminder for the administrators, e.g. who the invitation is for. */
   note: z.string().trim().max(100).optional(),
+};
+
+/** Invitations created by superadmins: an instance role and optionally a role on one server. */
+export const invitationCreateSchema = z
+  .object({
+    ...invitationFields,
+    isSuperadmin: z.boolean(),
+    serverId: z.string().optional(),
+    role: roleKeySchema.optional(),
+  })
+  .refine((body) => (body.serverId === undefined) === (body.role === undefined), {
+    message: 'Give both the server and the role, or neither',
+  });
+
+/** Invitations to one server, created by its members who manage members. */
+export const serverInvitationCreateSchema = z.object({
+  ...invitationFields,
+  role: roleKeySchema,
 });
 
 export const invitationInfoSchema = z.object({
   id: z.string(),
   isSuperadmin: z.boolean(),
+  /** The new account becomes a member of this server with `role`. */
+  serverId: z.string().nullable(),
+  serverName: z.string().nullable(),
+  role: roleKeySchema.nullable(),
   note: z.string().nullable(),
   createdBy: z.string().nullable(),
   createdAt: z.string(),

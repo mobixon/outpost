@@ -56,8 +56,12 @@ onMounted(async () => {
 
 const description = computed(() => {
   if (preview.value === null) return undefined;
-  const by = preview.value.invitedBy ?? t('invite.someone');
-  return preview.value.isSuperadmin ? t('invite.textAdmin', { by }) : t('invite.text', { by });
+  const { invitedBy, serverName, role, isSuperadmin } = preview.value;
+  const by = invitedBy ?? t('invite.someone');
+  if (serverName !== null && role !== null) {
+    return t('invite.textServer', { by, server: serverName, role: t(`roles.${role}`) });
+  }
+  return isSuperadmin ? t('invite.textAdmin', { by }) : t('invite.text', { by });
 });
 
 async function run(action: () => Promise<void>): Promise<void> {

@@ -2,6 +2,7 @@ import type { PluginInfo } from '@outpost/shared';
 import type { Kysely } from 'kysely';
 import type { EventBus } from './events.js';
 import type { HttpRegistry } from './http.js';
+import type { ServerInfo } from './servers.js';
 
 export interface PluginLogger {
   debug(message: string, details?: Record<string, unknown>): void;
@@ -23,6 +24,8 @@ export interface PluginAuditEntry {
   /** Short action name, stored as `<plugin id>.<action>`, e.g. `outpost.players.ban`. */
   action: string;
   userId?: string;
+  /** The game server the action concerns; shown in the server's audit log. */
+  serverId?: string;
   target?: string;
   details?: Record<string, unknown>;
   ip?: string;
@@ -38,6 +41,24 @@ export interface PluginContext {
   /** Registers HTTP routes under `/api/v1/plugins/<plugin id>`. Only usable during `setup`. */
   readonly http: HttpRegistry;
   readonly kv: KeyValueStore;
+  /** The game servers of the instance. */
+  readonly servers: {
+    get(id: string): Promise<ServerInfo | undefined>;
+    list(): Promise<ServerInfo[]>;
+  };
+  readonly permissions: {
+    /** Whether the user has the permission on the server; superadmins have all. */
+    has(userId: string, serverId: string, permission: string): Promise<boolean>;
+  };
+  /**
+   * Authenticated encryption for secrets the plugin stores, such as passwords of other systems.
+   * The key is derived from OUTPOST_SECRET_KEY and differs per plugin.
+   */
+  readonly secrets: {
+    seal(plaintext: string): string;
+    /** Throws when the value was not sealed by this plugin or has been modified. */
+    open(sealed: string): string;
+  };
   /**
    * Database access for the plugin's own tables, created by its migrations. Pass the table types
    * as the generic parameter and prefix table names with something plugin-specific.
