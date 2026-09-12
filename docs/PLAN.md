@@ -457,12 +457,13 @@ Core tables (SQLite or PostgreSQL through Kysely):
 - `user_backup_codes` (user_id, code_hash, used_at?)
 - `user_identities` (user_id, provider, subject, email?, created_at) — OIDC/GitHub links
 - `sessions` (id_hash, user_id, mfa_passed, ip, user_agent, created_at, last_seen_at, expires_at)
-- `invitations` (token_hash, created_by, is_superadmin, note?, expires_at, used_by?, used_at?);
-  Stage 3 adds server_id? and role_id? for invitations to a server
-- `roles` (id, key, name, builtin, permissions JSON)
-- `servers` (id, slug, name, game, runtime JSON, channel JSON with encrypted secret, files JSON,
-  settings JSON, created_at)
-- `server_members` (server_id, user_id, role_id)
+- `invitations` (token_hash, created_by, is_superadmin, note?, expires_at, used_by?, used_at?,
+  server_id?, role_key?)
+- `roles` (key, rank, builtin, permissions JSON for custom roles; built-in roles take theirs from
+  the permission registry, where the core and plugins declare which roles have a permission)
+- `servers` (id, slug, name, created_at; Stage 4 adds game, runtime JSON, channel JSON with
+  encrypted secret, files JSON, settings JSON)
+- `server_members` (server_id, user_id, role_key)
 - `audit_log` (id, at, user_id?, server_id?, action, target?, details JSON, ip?)
 - `plugin_kv` (plugin_id, scope — empty or a server id, key, value JSON, updated_at)
 
@@ -497,9 +498,11 @@ Errors: `{ error: { code, message, details? } }` with proper status codes.
   `GET /me`, `/me/password`, `/me/2fa/*`, `/me/sessions`, `/me/identities`
 - Admin: `/users`, `/invitations`, `/roles` (read-only in v0.1), `/audit`
 - Servers: `GET|POST /servers`, `GET|PATCH|DELETE /servers/:id`, `/servers/:id/members`,
+  `/servers/:id/invitations`, `GET /servers/:id/audit`,
   `GET /servers/:id/overview` (status, version, settings with locks), `POST /servers/:id/test`
   (checks runtime, RCON and file access), `GET /discovery`
-- Modules: `/servers/:id/console/*`, `/servers/:id/players/*`, `/servers/:id/tasks/*`
+- Modules: `/servers/:id/plugins/<plugin id>/*` (e.g. console, players, tasks), registered with
+  `ctx.http.serverRoute({ permission, capability?, … })`
 - `GET /plugins` — enabled modules, permissions, capabilities per server
 
 WebSocket `/api/v1/ws` (cookie auth + Origin check), multiplexed:

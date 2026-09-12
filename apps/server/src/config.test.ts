@@ -25,6 +25,7 @@ describe('loadConfig', () => {
       requireTwoFactorForAdmins: true,
       setupToken: undefined,
       providers: [],
+      auditRetentionDays: 180,
     });
   });
 

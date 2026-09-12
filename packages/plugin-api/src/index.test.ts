@@ -70,6 +70,36 @@ describe('definePlugin', () => {
   });
 });
 
+describe('definePlugin permissions', () => {
+  const valid = { id: 'outpost.players', version: '0.1.0', apiVersion: PLUGIN_API_VERSION };
+
+  it('accepts permissions for built-in roles', () => {
+    expect(() =>
+      definePlugin({
+        ...valid,
+        permissions: [{ key: 'players.kick', roles: ['owner', 'admin', 'moderator'] }],
+      }),
+    ).not.toThrow();
+  });
+
+  it.each(['kick', 'Players.kick', 'players.', 'players..kick'])('rejects key %j', (key) => {
+    expect(() => definePlugin({ ...valid, permissions: [{ key, roles: [] }] })).toThrow(
+      /invalid or duplicate permission/,
+    );
+  });
+
+  it('rejects duplicate keys and unknown roles', () => {
+    const kick = { key: 'players.kick', roles: ['owner'] as const };
+    expect(() => definePlugin({ ...valid, permissions: [kick, kick] })).toThrow(/duplicate/);
+    expect(() =>
+      definePlugin({
+        ...valid,
+        permissions: [{ key: 'players.kick', roles: ['god' as 'owner'] }],
+      }),
+    ).toThrow(/unknown role "god"/);
+  });
+});
+
 describe('parseDependency', () => {
   it('detects optional dependencies', () => {
     expect(parseDependency('outpost.console')).toEqual({ id: 'outpost.console', optional: false });

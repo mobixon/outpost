@@ -7,15 +7,19 @@ import {
   type RouteAccess,
   type RouteDefinition,
   type RouteSchema,
+  type ServerRouteDefinition,
+  type ServerRouteSchema,
   type SqlDialect,
 } from '@outpost/plugin-api';
 import type { PluginInfo } from '@outpost/shared';
 import type { FastifyBaseLogger } from 'fastify';
 import type { Kysely } from 'kysely';
 import type { AuditLog } from '../audit.js';
+import { SecretBox } from '../auth/crypto.js';
 import { CORE_SCOPE } from '../db/core-migrations.js';
 import { runMigrations } from '../db/migrator.js';
 import type { CoreTables } from '../db/schema.js';
+import type { PermissionRegistry } from '../rbac/permissions.js';
 import { createKeyValueStore } from './kv.js';
 
 export class PluginLoadError extends Error {
@@ -104,8 +108,16 @@ export interface PluginHostOptions {
   audit: AuditLog;
   logger: FastifyBaseLogger;
   instanceVersion: string;
+  /** Receives the permissions the plugins declare. */
+  permissions: PermissionRegistry;
+  /** Key material for the plugins' secret boxes. */
+  secretKey: string;
+  servers: PluginContext['servers'];
+  hasPermission: PluginContext['permissions']['has'];
   /** Mounts a plugin route on the HTTP server. */
   registerRoute(pluginId: string, route: RouteDefinition<RouteSchema, RouteAccess>): void;
+  /** Mounts a plugin route of a game server on the HTTP server. */
+  registerServerRoute(pluginId: string, route: ServerRouteDefinition<ServerRouteSchema>): void;
 }
 
 /** Runs plugin migrations and `setup` in dependency order, and plugin cleanups on shutdown. */
@@ -129,12 +141,26 @@ export class PluginHost {
   }
 
   async start(): Promise<void> {
-    const { db, dialect, events, audit, logger, instanceVersion, registerRoute } = this.#options;
+    const { db, dialect, events, audit, logger, instanceVersion, permissions } = this.#options;
+    // All permissions first, so that routes can require permissions of other plugins.
+    for (const plugin of this.#plugins) {
+      for (const permission of plugin.permissions ?? []) {
+        permissions.register(`plugin "${plugin.id}"`, permission);
+      }
+    }
     for (const plugin of this.#plugins) {
       const log = logger.child({ plugin: plugin.id });
       await runMigrations(db, dialect, plugin.id, plugin.migrations ?? [], log);
 
       let inSetup = true;
+      const assertSetup = (method: string, url: string): void => {
+        if (!inSetup) {
+          throw new Error(
+            `Plugin "${plugin.id}" can register routes only during setup (${method} ${url})`,
+          );
+        }
+      };
+      const secrets = new SecretBox(this.#options.secretKey, `plugin:${plugin.id}`);
       const ctx: PluginContext = {
         plugin: { id: plugin.id, version: plugin.version },
         instance: { version: instanceVersion },
@@ -145,15 +171,29 @@ export class PluginHost {
         },
         http: {
           route: (route) => {
-            if (!inSetup) {
+            assertSetup(route.method, route.url);
+            this.#options.registerRoute(plugin.id, route);
+          },
+          serverRoute: (route) => {
+            assertSetup(route.method, route.url);
+            if (!permissions.has(route.permission)) {
               throw new Error(
-                `Plugin "${plugin.id}" can register routes only during setup (${route.method} ${route.url})`,
+                `Plugin "${plugin.id}" route ${route.method} ${route.url} requires the unknown permission "${route.permission}"`,
               );
             }
-            registerRoute(plugin.id, route);
+            this.#options.registerServerRoute(
+              plugin.id,
+              route as unknown as ServerRouteDefinition<ServerRouteSchema>,
+            );
           },
         },
         kv: createKeyValueStore(db, plugin.id),
+        servers: this.#options.servers,
+        permissions: { has: this.#options.hasPermission },
+        secrets: {
+          seal: (plaintext) => secrets.seal(plaintext),
+          open: (sealed) => secrets.open(sealed),
+        },
         db: <Tables>() => db as unknown as Kysely<Tables>,
         plugins: () => this.list(),
         onShutdown: (callback) => {

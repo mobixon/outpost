@@ -9,8 +9,11 @@ import {
   type RouteDefinition,
   type RouteRequest,
   type RouteSchema,
+  type ServerRouteDefinition,
+  type ServerRouteRequest,
+  type ServerRouteSchema,
 } from '@outpost/plugin-api';
-import { pluginApiPath, type ApiErrorBody } from '@outpost/shared';
+import { API_PREFIX, pluginApiPath, type ApiErrorBody } from '@outpost/shared';
 import Fastify, {
   type FastifyError,
   type FastifyInstance,
@@ -26,9 +29,11 @@ import {
   validatorCompiler,
 } from 'fastify-type-provider-zod';
 import { sql } from 'kysely';
+import { z } from 'zod';
 import { AuditLog } from './audit.js';
 import { createProviders, type GithubEndpoints } from './auth/providers.js';
 import { AuthService, toAuthenticatedUser } from './auth/service.js';
+import { findUserById } from './auth/users.js';
 import type { Config } from './config.js';
 import { createDatabase } from './db/connection.js';
 import { CORE_SCOPE, coreMigrations } from './db/core-migrations.js';
@@ -38,12 +43,19 @@ import { registerSecurity } from './http/security.js';
 import { isClientRoute, registerWebUi } from './http/web-ui.js';
 import { PluginHost, resolvePlugins } from './plugins/host.js';
 import { builtInPlugins } from './plugins/registry.js';
+import { PermissionRegistry } from './rbac/permissions.js';
+import { registerAuditRoutes } from './routes/audit.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerExternalAuthRoutes } from './routes/external-auth.js';
 import { registerInvitationRoutes } from './routes/invitations.js';
 import { registerMeRoutes } from './routes/me.js';
+import { registerServerRoutes } from './routes/servers.js';
 import { registerSystemRoutes } from './routes/system.js';
 import { registerUserRoutes } from './routes/users.js';
+import { ServerService } from './servers/service.js';
+
+/** How often old audit log entries are deleted. */
+const AUDIT_PRUNE_INTERVAL_MS = 6 * 60 * 60_000;
 
 export interface BuildAppOptions {
   /** Plugins to choose from instead of the built-in ones (used by tests). */
@@ -78,7 +90,9 @@ export async function buildApp(
 
   const { db, dialect } = createDatabase(config.databaseUrl);
   let host: PluginHost | undefined;
+  let pruneTimer: NodeJS.Timeout | undefined;
   app.addHook('onClose', async () => {
+    clearInterval(pruneTimer);
     await host?.stop();
     await db.destroy();
   });
@@ -119,6 +133,8 @@ export async function buildApp(
       if (request.url.startsWith('/api/')) request.auth = await auth.authenticate(request);
     });
 
+    const registry = new PermissionRegistry();
+    const servers = new ServerService(db, registry, auth);
     const events = createEventBus(app.log);
     const plugins = new PluginHost(
       resolvePlugins(options.plugins ?? builtInPlugins, config.plugins),
@@ -129,7 +145,23 @@ export async function buildApp(
         audit,
         logger: app.log,
         instanceVersion: config.version,
+        permissions: registry,
+        secretKey: config.secretKey,
+        servers: {
+          get: async (id) => {
+            const server = await servers.find(id);
+            return server && servers.info(server);
+          },
+          list: async () => (await servers.list()).map((server) => servers.info(server)),
+        },
+        hasPermission: async (userId, serverId, permission) => {
+          const user = await findUserById(db, userId);
+          if (user === undefined || user.disabled_at !== null) return false;
+          return (await servers.access(user, serverId))?.permissions.has(permission) ?? false;
+        },
         registerRoute: (pluginId, route) => registerPluginRoute(app, auth, pluginId, route),
+        registerServerRoute: (pluginId, route) =>
+          registerServerPluginRoute(app, servers, pluginId, route),
       },
     );
     host = plugins;
@@ -151,11 +183,18 @@ export async function buildApp(
     registerInvitationRoutes(app, auth);
     registerMeRoutes(app, auth);
     registerUserRoutes(app, auth);
+    registerServerRoutes(app, auth, servers);
+    registerAuditRoutes(app, auth, registry);
     await plugins.start();
 
     if (config.webDir) await registerWebUi(app, config.webDir);
 
     app.addHook('onReady', async () => {
+      await audit.prune(config.auditRetentionDays);
+      pruneTimer = setInterval(() => {
+        void audit.prune(config.auditRetentionDays);
+      }, AUDIT_PRUNE_INTERVAL_MS);
+      pruneTimer.unref();
       await events.emit('outpost.started', { version: config.version });
     });
     app.addHook('preClose', async () => {
@@ -224,6 +263,52 @@ function registerPluginRoute(
         user,
         ip: request.ip,
       } as RouteRequest<RouteSchema, RouteAccess>);
+    },
+  });
+}
+
+function registerServerPluginRoute(
+  app: FastifyInstance,
+  servers: ServerService,
+  pluginId: string,
+  route: ServerRouteDefinition<ServerRouteSchema>,
+): void {
+  if (route.url !== '' && !route.url.startsWith('/')) {
+    throw new Error(`Plugin "${pluginId}" route URL must start with "/": ${route.url}`);
+  }
+  const { params, querystring, body, response } = route.schema ?? {};
+  app.route({
+    method: route.method,
+    url: `${API_PREFIX}/servers/:serverId/plugins/${pluginId}${route.url}`,
+    schema: {
+      tags: [pluginId],
+      params: (params ?? z.object({})).extend({ serverId: z.string() }),
+      ...(querystring && { querystring }),
+      ...(body && { body }),
+      ...(response && { response: { 200: response } }),
+    },
+    handler: async (request) => {
+      const { serverId } = request.params as { serverId: string };
+      const access = await servers.require(request, serverId, route.permission, {
+        sudo: route.sudo ?? false,
+      });
+      const server = servers.info(access.server);
+      if (route.capability !== undefined && !server.capabilities.includes(route.capability)) {
+        throw new HttpError(
+          409,
+          'capability_missing',
+          `This server does not support ${route.capability}`,
+        );
+      }
+      return route.handler({
+        params: request.params,
+        query: request.query,
+        body: request.body,
+        user: toAuthenticatedUser(access.ctx.user),
+        server,
+        permissions: access.permissions,
+        ip: request.ip,
+      } as ServerRouteRequest<ServerRouteSchema>);
     },
   });
 }

@@ -24,6 +24,7 @@ const envSchema = z.object({
   OUTPOST_PUBLIC_URL: z.url({ protocol: /^https?$/ }).optional(),
   OUTPOST_REQUIRE_2FA_FOR_ADMINS: booleanFromString.default(true),
   OUTPOST_SETUP_TOKEN: z.string().min(16).optional(),
+  OUTPOST_AUDIT_RETENTION_DAYS: z.coerce.number().int().min(0).default(180),
   OUTPOST_GITHUB_CLIENT_ID: z.string().optional(),
   OUTPOST_GITHUB_CLIENT_SECRET: z.string().optional(),
   OUTPOST_GITHUB_SIGNUP_ORGS: z.string().optional(),
@@ -107,6 +108,8 @@ export interface Config {
   setupToken: string | undefined;
   /** External login providers: GitHub first, then OIDC providers by id. */
   providers: ProviderConfig[];
+  /** Audit log entries are deleted after this many days; 0 keeps them forever. */
+  auditRetentionDays: number;
 }
 
 export class ConfigError extends Error {
@@ -163,6 +166,7 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     requireTwoFactorForAdmins: values.OUTPOST_REQUIRE_2FA_FOR_ADMINS,
     setupToken: values.OUTPOST_SETUP_TOKEN,
     providers,
+    auditRetentionDays: values.OUTPOST_AUDIT_RETENTION_DAYS,
   };
 }
 

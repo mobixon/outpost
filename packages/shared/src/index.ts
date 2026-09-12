@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export * from './admin.js';
 export * from './auth.js';
+export * from './servers.js';
 
 /** Base path of the HTTP API. */
 export const API_PREFIX = '/api/v1';

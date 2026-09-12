@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { InvitationInfo } from '@outpost/shared';
+import type { InvitationInfo, RoleKey } from '@outpost/shared';
 import type { Kysely, Selectable } from 'kysely';
 import type { CoreTables, InvitationsTable } from '../db/schema.js';
 import { randomToken, sha256 } from './crypto.js';
@@ -22,7 +22,8 @@ export class InvitationError extends Error {
 
 /**
  * Creates the account of an invitation: with a password, or with an external identity as its
- * login method. Throws InvitationError when the invitation cannot be used or the name is taken.
+ * login method, and makes it a member of the invitation's server. Throws InvitationError when
+ * the invitation cannot be used or the name is taken.
  */
 export async function acceptInvitation(
   db: Kysely<CoreTables>,
@@ -47,6 +48,17 @@ export async function acceptInvitation(
     if (input.identity !== undefined) {
       await linkIdentity(trx, { userId: user.id, ...input.identity });
     }
+    if (invitation.server_id !== null && invitation.role_key !== null) {
+      await trx
+        .insertInto('server_members')
+        .values({
+          server_id: invitation.server_id,
+          user_id: user.id,
+          role_key: invitation.role_key,
+          created_at: Date.now(),
+        })
+        .execute();
+    }
     if (!(await claimInvitation(trx, invitation.id, user.id))) {
       throw new InvitationError('invitation_invalid');
     }
@@ -60,7 +72,14 @@ const INVITATION_HISTORY_MS = 30 * 24 * 60 * 60_000;
 /** Creates an invitation and returns the token for the link. Only a hash of it is stored. */
 export async function createInvitation(
   db: Kysely<CoreTables>,
-  input: { createdBy: string; isSuperadmin: boolean; note: string | null; lifetimeMs: number },
+  input: {
+    createdBy: string;
+    isSuperadmin: boolean;
+    note: string | null;
+    lifetimeMs: number;
+    serverId?: string | null;
+    role?: RoleKey | null;
+  },
 ): Promise<{ token: string; invitation: InvitationRow }> {
   const now = Date.now();
   const token = randomToken();
@@ -74,6 +93,8 @@ export async function createInvitation(
     expires_at: now + input.lifetimeMs,
     used_by: null,
     used_at: null,
+    server_id: input.serverId ?? null,
+    role_key: input.role ?? null,
   };
   await db.insertInto('invitations').values(invitation).execute();
   return { token, invitation };
@@ -84,12 +105,17 @@ export function findPendingInvitation(db: Kysely<CoreTables>, token: string) {
   return db
     .selectFrom('invitations')
     .leftJoin('users', 'users.id', 'invitations.created_by')
+    .leftJoin('servers', 'servers.id', 'invitations.server_id')
     .selectAll('invitations')
-    .select('users.username as created_by_username')
+    .select(['users.username as created_by_username', 'servers.name as server_name'])
     .where('invitations.token_hash', '=', sha256(token))
     .where('invitations.used_at', 'is', null)
     .where('invitations.expires_at', '>', Date.now())
     .executeTakeFirst();
+}
+
+export function findInvitation(db: Kysely<CoreTables>, id: string) {
+  return db.selectFrom('invitations').selectAll().where('id', '=', id).executeTakeFirst();
 }
 
 /**
@@ -113,22 +139,41 @@ export async function claimInvitation(
   return Number(result.numUpdatedRows) > 0;
 }
 
-/** All invitations, newest first; old used and expired ones are deleted first. */
-export async function listInvitations(db: Kysely<CoreTables>): Promise<InvitationInfo[]> {
+/**
+ * Invitations newest first, all or those of one server; old used and expired ones are deleted
+ * first.
+ */
+export async function listInvitations(
+  db: Kysely<CoreTables>,
+  filter: { serverId?: string } = {},
+): Promise<InvitationInfo[]> {
   const cutoff = Date.now() - INVITATION_HISTORY_MS;
   await db
     .deleteFrom('invitations')
     .where((eb) => eb.or([eb('used_at', '<', cutoff), eb('expires_at', '<', cutoff)]))
     .execute();
-  const rows = await db
+  let query = db
     .selectFrom('invitations')
     .leftJoin('users as creator', 'creator.id', 'invitations.created_by')
     .leftJoin('users as invitee', 'invitee.id', 'invitations.used_by')
+    .leftJoin('servers', 'servers.id', 'invitations.server_id')
     .selectAll('invitations')
-    .select(['creator.username as created_by_username', 'invitee.username as used_by_username'])
-    .orderBy('invitations.created_at', 'desc')
-    .execute();
-  return rows.map((row) => toInvitationInfo(row, row.created_by_username, row.used_by_username));
+    .select([
+      'creator.username as created_by_username',
+      'invitee.username as used_by_username',
+      'servers.name as server_name',
+    ]);
+  if (filter.serverId !== undefined) {
+    query = query.where('invitations.server_id', '=', filter.serverId);
+  }
+  const rows = await query.orderBy('invitations.created_at', 'desc').execute();
+  return rows.map((row) =>
+    toInvitationInfo(row, {
+      createdBy: row.created_by_username,
+      usedBy: row.used_by_username,
+      serverName: row.server_name,
+    }),
+  );
 }
 
 export async function deleteInvitation(db: Kysely<CoreTables>, id: string): Promise<boolean> {
@@ -138,18 +183,20 @@ export async function deleteInvitation(db: Kysely<CoreTables>, id: string): Prom
 
 export function toInvitationInfo(
   row: InvitationRow,
-  createdBy: string | null,
-  usedBy: string | null,
+  names: { createdBy: string | null; usedBy: string | null; serverName: string | null },
 ): InvitationInfo {
   const now = Date.now();
   return {
     id: row.id,
     isSuperadmin: row.is_superadmin === 1,
+    serverId: row.server_id,
+    serverName: names.serverName,
+    role: row.role_key,
     note: row.note,
-    createdBy,
+    createdBy: names.createdBy,
     createdAt: new Date(row.created_at).toISOString(),
     expiresAt: new Date(row.expires_at).toISOString(),
     status: row.used_at !== null ? 'used' : row.expires_at <= now ? 'expired' : 'pending',
-    usedBy,
+    usedBy: names.usedBy,
   };
 }

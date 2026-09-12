@@ -21,6 +21,9 @@ describe.each(targets)('database ($name)', ({ url }) => {
     const tables = [
       'test_items',
       'invitations',
+      'server_members',
+      'servers',
+      'roles',
       'user_identities',
       'user_backup_codes',
       'sessions',
@@ -48,6 +51,7 @@ describe.each(targets)('database ($name)', ({ url }) => {
       'outpost.core/0001_plugin_kv',
       'outpost.core/0002_auth',
       'outpost.core/0003_external_auth',
+      'outpost.core/0004_servers',
     ]);
     expect(typeof rows[0]?.applied_at).toBe('number');
   });

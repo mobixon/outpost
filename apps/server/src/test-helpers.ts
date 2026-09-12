@@ -59,6 +59,31 @@ export function get(server: FastifyInstance, url: string, cookie?: string) {
   return server.inject({ method: 'GET', url, ...(cookie && { headers: { cookie } }) });
 }
 
+/**
+ * Creates an account through an invitation of the superadmin (with a role on a server if given)
+ * and returns its session cookie and id.
+ */
+export async function createUserWithInvitation(
+  server: FastifyInstance,
+  adminCookie: string,
+  username: string,
+  membership?: { serverId: string; role: string },
+): Promise<{ cookie: string; id: string }> {
+  const created = await send(server, 'POST', '/api/v1/invitations', {
+    cookie: adminCookie,
+    body: { isSuperadmin: false, expiresInDays: 7, ...membership },
+  });
+  if (created.statusCode !== 201) throw new Error(`Invitation failed: ${created.body}`);
+  const token = created.json<{ url: string }>().url.split('/').pop() ?? '';
+  const accepted = await send(server, 'POST', `/api/v1/invite/${token}/accept`, {
+    body: { username, password: TEST_PASSWORD },
+  });
+  if (accepted.statusCode !== 201) throw new Error(`Accepting failed: ${accepted.body}`);
+  const cookie = sessionCookie(accepted);
+  const { id } = (await get(server, '/api/v1/me', cookie)).json<{ id: string }>();
+  return { cookie, id };
+}
+
 /** Creates the first administrator and returns the session cookie. */
 export async function setUpAdmin(server: FastifyInstance, username = 'admin'): Promise<string> {
   const response = await send(server, 'POST', '/api/v1/setup', {

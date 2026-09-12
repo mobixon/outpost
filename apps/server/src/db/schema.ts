@@ -1,5 +1,10 @@
+import type { RoleKey } from '@outpost/shared';
+
 /** Tables owned by the core. Plugins describe their own tables in their packages. */
 export interface CoreTables {
+  roles: RolesTable;
+  servers: ServersTable;
+  server_members: ServerMembersTable;
   outpost_migrations: MigrationsTable;
   plugin_kv: PluginKvTable;
   users: UsersTable;
@@ -96,6 +101,35 @@ export interface InvitationsTable {
   expires_at: number;
   used_by: string | null;
   used_at: number | null;
+  /** The new account becomes a member of this server with `role_key`. */
+  server_id: string | null;
+  role_key: RoleKey | null;
+}
+
+/** Server roles. Built-in roles get their permissions from the permission registry. */
+export interface RolesTable {
+  key: string;
+  rank: number;
+  builtin: number;
+  /** JSON list of permission keys, for custom roles (a later version). */
+  permissions: string | null;
+  created_at: number;
+}
+
+export interface ServersTable {
+  id: string;
+  /** Short name used in URLs of the web UI. */
+  slug: string;
+  name: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ServerMembersTable {
+  server_id: string;
+  user_id: string;
+  role_key: RoleKey;
+  created_at: number;
 }
 
 export interface AuditLogTable {
@@ -103,6 +137,8 @@ export interface AuditLogTable {
   at: number;
   /** Kept when the user is deleted, so no foreign key. */
   user_id: string | null;
+  /** Kept when the server is deleted, so no foreign key. */
+  server_id: string | null;
   action: string;
   target: string | null;
   /** JSON */

@@ -1,7 +1,19 @@
-import { HouseIcon, MailPlusIcon, UsersIcon } from '@lucide/vue';
+import { HouseIcon, MailPlusIcon, ScrollTextIcon, UsersIcon } from '@lucide/vue';
 import type { SessionState } from '@outpost/shared';
 import type { WebPluginDefinition } from '@outpost/web-plugin-api';
 import { inject, type Component, type InjectionKey } from 'vue';
+
+/** A server tab of an enabled plugin (see ServerLayout for the tabs of the core). */
+export interface ShellServerTab {
+  /** `<plugin id>.<tab key>`. */
+  id: string;
+  key: string;
+  label: string;
+  icon: Component;
+  permission: string;
+  capability?: string;
+  order: number;
+}
 
 export interface ShellNavItem {
   /** `<plugin id>.<item key>`, or `core.*` for entries of the shell itself. */
@@ -14,6 +26,7 @@ export interface ShellNavItem {
 
 export interface ShellState {
   navItems: readonly ShellNavItem[];
+  serverTabs: readonly ShellServerTab[];
   /** Session state loaded at startup; null when the server could not be reached. */
   session: SessionState | null;
 }
@@ -43,6 +56,13 @@ export function buildNavItems(
         to: '/admin/invitations',
         order: 910,
       },
+      {
+        id: 'core.audit',
+        label: 'nav.audit',
+        icon: ScrollTextIcon,
+        to: '/admin/audit',
+        order: 920,
+      },
     );
   }
   for (const plugin of plugins) {
@@ -58,6 +78,21 @@ export function buildNavItems(
   }
   // Array.prototype.sort is stable, so entries with the same order keep the plugin order.
   return items.sort((a, b) => a.order - b.order);
+}
+
+/** Server tabs of the enabled plugins. */
+export function buildServerTabs(plugins: readonly WebPluginDefinition[]): ShellServerTab[] {
+  return plugins.flatMap((plugin) =>
+    (plugin.serverTabs ?? []).map((tab) => ({
+      id: `${plugin.id}.${tab.key}`,
+      key: tab.key,
+      label: tab.label,
+      icon: tab.icon,
+      permission: tab.permission,
+      ...(tab.capability !== undefined && { capability: tab.capability }),
+      order: tab.order ?? DEFAULT_ORDER,
+    })),
+  );
 }
 
 export function useShell(): ShellState {

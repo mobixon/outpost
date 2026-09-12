@@ -13,10 +13,12 @@ Open Outpost in the browser, enter the token and choose a username and password.
 
 ## Invitations
 
-Further accounts are created with invitation links. Administrators create them under
-**Administration → Invitations**:
+Further accounts are created with invitation links. Superadmins create them under
+**Administration → Invitations**, and owners and admins of a server under the server's **Members**
+page (see [servers](servers.md#members)):
 
-- an invitation creates one account, either a regular user or an administrator;
+- an invitation creates one account, either a regular user or a superadmin, optionally as a member
+  of one server with a role;
 - it is valid for 1, 7 or 30 days and can be deleted before it is used;
 - the link is shown once, right after it is created: the database stores only a hash of its token.
 

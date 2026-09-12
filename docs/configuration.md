@@ -26,6 +26,7 @@ insecure development key and `http://localhost:5173` (the Vite dev server) as th
 | `OUTPOST_PUBLIC_URL`             | `http://localhost:5173` (development)                              | See above                                                                                                                  |
 | `OUTPOST_REQUIRE_2FA_FOR_ADMINS` | `true`                                                             | Administrators must turn on two-factor authentication before they can use the panel                                        |
 | `OUTPOST_SETUP_TOKEN`            | random, printed to the log                                         | Token for creating the first administrator (at least 16 characters). Useful for automated deployments                      |
+| `OUTPOST_AUDIT_RETENTION_DAYS`   | `180`                                                              | Audit log entries older than this many days are deleted; `0` keeps them forever                                            |
 | `OUTPOST_PLUGINS`                | all built-in modules                                               | Comma-separated module ids to enable (`outpost.about`), or only exclusions (`-outpost.about`)                              |
 | `OUTPOST_WEB_DIR`                | unset (image: `/app/public`)                                       | Directory with the built web UI. When unset, only the API is served — during development the UI comes from the Vite server |
 | `OUTPOST_VERSION`                | `0.0.0-dev`                                                        | Version shown in the UI; set by the image build                                                                            |
@@ -72,4 +73,4 @@ Migrations run automatically on startup, for the core and for every enabled modu
 
 The OpenAPI description of the HTTP API is served at `GET /api/v1/openapi.json`.
 
-See also: [authentication and security](authentication.md).
+See also: [authentication and security](authentication.md), [servers, roles and permissions](servers.md).

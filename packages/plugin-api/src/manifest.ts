@@ -1,6 +1,7 @@
-import { isValidPluginId } from '@outpost/shared';
+import { isValidPluginId, ROLE_KEYS } from '@outpost/shared';
 import type { PluginContext } from './context.js';
 import type { Migration } from './db.js';
+import { PERMISSION_KEY_PATTERN, type PermissionDeclaration } from './servers.js';
 
 /** Plugin API version implemented by this package. */
 export const PLUGIN_API_VERSION = 1;
@@ -25,6 +26,8 @@ export interface PluginDefinition extends PluginManifest {
   dependsOn?: readonly string[];
   /** Migrations for the plugin's own tables, in order. They run before `setup`. */
   migrations?: readonly Migration[];
+  /** Server permissions the plugin adds, with the built-in roles that have them. */
+  permissions?: readonly PermissionDeclaration[];
   /** Called once on startup, after the plugin's dependencies. Register routes and handlers here. */
   setup?(ctx: PluginContext): void | Promise<void>;
 }
@@ -79,6 +82,21 @@ export function definePlugin<T extends PluginDefinition>(plugin: T): T {
       );
     }
     previous = migration.name;
+  }
+  const keys = new Set<string>();
+  for (const permission of plugin.permissions ?? []) {
+    if (!PERMISSION_KEY_PATTERN.test(permission.key) || keys.has(permission.key)) {
+      throw new PluginDefinitionError(
+        `Plugin "${plugin.id}" has an invalid or duplicate permission "${permission.key}": expected unique keys like "players.kick"`,
+      );
+    }
+    keys.add(permission.key);
+    const unknown = permission.roles.find((role) => !ROLE_KEYS.includes(role));
+    if (unknown !== undefined) {
+      throw new PluginDefinitionError(
+        `Plugin "${plugin.id}" gives permission "${permission.key}" to unknown role "${unknown}"`,
+      );
+    }
   }
   return plugin;
 }
