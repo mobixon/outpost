@@ -38,27 +38,27 @@ from the panel.
 
 ## 2. Decision log
 
-| #   | Topic                       | Decision                                                                                              | Why                                                                                                                 |
-| --- | --------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| D1  | Control model               | **Core + drivers**: runtime driver (Docker) + command channel (RCON) + file access                    | Works with servers users already run (incl. CapRover); creating servers / agents can be added later as more drivers |
-| D2  | Stack                       | **TypeScript** end-to-end, Node.js 24 LTS                                                             | One language, modules as npm packages, first-class WebSocket; lowest barrier for contributors                       |
-| D3  | Modularity                  | **Monorepo**; built-in modules use the same public Plugin API that third-party plugins will use later | Keeps the API honest without committing to a stable external ABI in v0.1                                            |
-| D4  | Scale                       | Many servers, many users, per-server roles, global superadmin, audit log                              | Expected minimum for a public product                                                                               |
-| D5  | MVP features                | Console, Players, Scheduler (cron commands + announcements)                                           | Owner's priority                                                                                                    |
-| D6  | Externally managed settings | **Hybrid with locks**: settings controlled by container ENV are shown locked with the reason          | Nothing gets silently overwritten on restart                                                                        |
-| D7  | Login                       | Local accounts (argon2id) + TOTP 2FA + backup codes; generic **OIDC** and **GitHub** login            | Standard for self-hosted admin tools                                                                                |
-| D8  | Console source              | **Docker logs** through a **read-only socket proxy**                                                  | Full output incl. startup/crashes; `inspect` gives ENV needed for D6; not root-equivalent                           |
-| D9  | Player data                 | RCON + panel's own history parsed from logs + direct JSON writes where safe                           | Fixes the offline-mode UUID problem; enables player cards                                                           |
-| D10 | Database                    | **SQLite by default**, optional **PostgreSQL** via `DATABASE_URL`; Drizzle ORM                        | Zero-config self-hosting, scalable option                                                                           |
-| D11 | Backend                     | **Fastify 5** + own framework-agnostic Plugin API                                                     | Light, fast, encapsulated plugins, good WS support                                                                  |
-| D12 | License                     | **MIT**                                                                                               | Maximum adoption                                                                                                    |
-| D13 | Name                        | **Outpost** — repo `github.com/mobixon/outpost`, image `ghcr.io/mobixon/outpost`                      | Name checked free on GitHub; unscoped npm `outpost` is taken → scoped npm packages when an SDK is published         |
-| D14 | UI languages                | EN (default) + RU via `vue-i18n`; modules ship their own messages                                     | Community can add locales                                                                                           |
-| D15 | UI kit                      | **PrimeVue + Tailwind CSS**, light/dark theme                                                         | Rich admin components (DataTable, forms, dialogs)                                                                   |
-| D16 | Roles                       | Built-in role presets (owner/admin/moderator/viewer) defined as permission sets; role editor later    | Data model ready for custom roles                                                                                   |
-| D17 | Server onboarding           | **Wizard + autodiscovery** of Docker containers/services, manual add also possible                    | Beginners avoid misconfiguration                                                                                    |
-| D18 | EasyAuth integration        | Roadmap — first post-MVP module                                                                       | Also validates the Plugin API on a real case                                                                        |
-| D19 | Workflow                    | **Each stage = branch + PR with CI**, owner merges                                                    | Clean public history, review per stage                                                                              |
+| #   | Topic                       | Decision                                                                                                         | Why                                                                                                                                          |
+| --- | --------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | Control model               | **Core + drivers**: runtime driver (Docker) + command channel (RCON) + file access                               | Works with servers users already run (incl. CapRover); creating servers / agents can be added later as more drivers                          |
+| D2  | Stack                       | **TypeScript** end-to-end, Node.js 24 LTS                                                                        | One language, modules as npm packages, first-class WebSocket; lowest barrier for contributors                                                |
+| D3  | Modularity                  | **Monorepo**; built-in modules use the same public Plugin API that third-party plugins will use later            | Keeps the API honest without committing to a stable external ABI in v0.1                                                                     |
+| D4  | Scale                       | Many servers, many users, per-server roles, global superadmin, audit log                                         | Expected minimum for a public product                                                                                                        |
+| D5  | MVP features                | Console, Players, Scheduler (cron commands + announcements)                                                      | Owner's priority                                                                                                                             |
+| D6  | Externally managed settings | **Hybrid with locks**: settings controlled by container ENV are shown locked with the reason                     | Nothing gets silently overwritten on restart                                                                                                 |
+| D7  | Login                       | Local accounts (argon2id) + TOTP 2FA + backup codes; generic **OIDC** and **GitHub** login                       | Standard for self-hosted admin tools                                                                                                         |
+| D8  | Console source              | **Docker logs** through a **read-only socket proxy**                                                             | Full output incl. startup/crashes; `inspect` gives ENV needed for D6; not root-equivalent                                                    |
+| D9  | Player data                 | RCON + panel's own history parsed from logs + direct JSON writes where safe                                      | Fixes the offline-mode UUID problem; enables player cards                                                                                    |
+| D10 | Database                    | **SQLite by default**, optional **PostgreSQL** via `DATABASE_URL`; Kysely query builder                          | Zero-config self-hosting, scalable option                                                                                                    |
+| D11 | Backend                     | **Fastify 5** + own framework-agnostic Plugin API                                                                | Light, fast, encapsulated plugins, good WS support                                                                                           |
+| D12 | License                     | **MIT**                                                                                                          | Maximum adoption                                                                                                                             |
+| D13 | Name                        | **Outpost** — repo `github.com/mobixon/outpost`, image `ghcr.io/mobixon/outpost`                                 | Name checked free on GitHub; unscoped npm `outpost` is taken → scoped npm packages when an SDK is published                                  |
+| D14 | UI languages                | EN (default) + RU via `vue-i18n`; modules ship their own messages                                                | Community can add locales                                                                                                                    |
+| D15 | UI kit                      | **shadcn-vue components on Reka UI + Tailwind CSS** (MIT), kept in `@outpost/ui`; Lucide icons; light/dark theme | Components live in our repo, plugins use our `@outpost/ui` API; PrimeVue was dropped because v5 became proprietary (license key, OEM clause) |
+| D16 | Roles                       | Built-in role presets (owner/admin/moderator/viewer) defined as permission sets; role editor later               | Data model ready for custom roles                                                                                                            |
+| D17 | Server onboarding           | **Wizard + autodiscovery** of Docker containers/services, manual add also possible                               | Beginners avoid misconfiguration                                                                                                             |
+| D18 | EasyAuth integration        | Roadmap — first post-MVP module                                                                                  | Also validates the Plugin API on a real case                                                                                                 |
+| D19 | Workflow                    | **Each stage = branch + PR with CI**, owner merges                                                               | Clean public history, review per stage                                                                                                       |
 
 Defaults chosen without a separate question (conventional choices, can be revisited in review):
 pnpm workspaces · ESM · Vue 3 + Vite + Vue Router + Pinia · zod schemas shared by server and web ·
@@ -147,7 +147,7 @@ outpost/
 │  ├─ plugin-api/          # PUBLIC contracts: definePlugin, driver/game/capability interfaces, event types
 │  ├─ web-plugin-api/      # PUBLIC contracts for UI modules: defineWebPlugin, slots, composables
 │  ├─ shared/              # zod schemas + types shared by server and web (API DTOs, permissions)
-│  └─ ui/                  # shared Vue components (LogView, PlayerAvatar, CronInput, LockBadge…)
+│  └─ ui/                  # shared UI kit: shadcn-vue components (Reka UI), theme, cn(); later LogView, CronInput…
 ├─ plugins/
 │  ├─ driver-docker/       # Docker runtime driver + autodiscovery
 │  ├─ channel-rcon/        # Source RCON protocol client
@@ -190,7 +190,7 @@ export default definePlugin({
     { key: 'players.kick', scope: 'server' },
     // ...
   ],
-  migrations: new URL('./migrations', import.meta.url), // per-plugin, per-dialect
+  migrations: [createPlayerTables],               // in order, once; same code for SQLite and PG
   settingsSchema: z.object({ /* per-server module settings */ }),
 
   async setup(ctx) {
@@ -204,7 +204,7 @@ export default definePlugin({
 });
 ```
 
-`ctx` exposes: `http`, `ws`, `events`, `db` (plugin-namespaced tables via Drizzle), `servers`
+`ctx` exposes: `http`, `ws`, `events`, `db` (Kysely access to the plugin's own tables), `kv` (small JSON key-value store), `servers`
 (lookup + capabilities), `audit.log()`, `permissions.check()`, `secrets` (encrypt/decrypt),
 `logger`, `config`, `i18n` (server-side messages), `scheduler`.
 
@@ -450,7 +450,7 @@ Every mutating action and every console command: time, user, server, action key,
 
 ## 10. Data model (v0.1)
 
-Core tables (Drizzle, SQLite + Postgres dialects):
+Core tables (SQLite or PostgreSQL through Kysely):
 
 - `users` (id, username, email, password_hash?, is_superadmin, locale, totp_secret_enc?,
   totp_enabled_at?, disabled_at?, created_at)
@@ -463,7 +463,7 @@ Core tables (Drizzle, SQLite + Postgres dialects):
   settings JSON, created_at)
 - `server_members` (server_id, user_id, role_id)
 - `audit_log` (id, at, user_id?, server_id?, action, target?, details JSON, ip?)
-- `plugin_kv` (plugin_id, server_id?, key, value JSON)
+- `plugin_kv` (plugin_id, scope — empty or a server id, key, value JSON, updated_at)
 
 Module tables (namespaced by plugin):
 
@@ -473,10 +473,14 @@ Module tables (namespaced by plugin):
 - scheduler: `sched_tasks` (id, server_id, name, type, cron, timezone, payload JSON, options JSON,
   enabled, created_by, created_at), `sched_runs` (task_id, started_at, finished_at, status, output)
 
-Dual-dialect approach: schema written once with a small column helper that emits both
-`sqliteTable` and `pgTable` definitions using a restricted type set (text, integer, boolean,
-timestamp-as-integer-ms, JSON-as-text/jsonb); migrations generated per dialect
-(`migrations/sqlite`, `migrations/pg`); CI runs the integration suite on both. SQLite runs in WAL mode.
+Dual-dialect approach: **Kysely** (a typed SQL query builder) instead of an ORM, because one
+query and one migration code path works on both databases (Drizzle needs a schema and queries
+per dialect). Migrations are TypeScript objects (`{ name, up(db, { dialect, types }) }`) listed in
+order by the core and by each plugin; the table `outpost_migrations (scope, name, applied_at)`
+records what ran, and every migration runs in a transaction. Column types are limited to what
+behaves the same on both: text, integer, `types.timestamp` (BIGINT epoch ms), `types.json` (text)
+and `types.boolean` (0/1); ids are generated by the application. CI runs the database tests on
+SQLite and PostgreSQL. SQLite runs in WAL mode.
 
 ---
 
@@ -586,7 +590,7 @@ merge. Size is relative (S/M/L).
 | #   | Stage                        | Scope                                                                                                                                                                                                                                                                       | Done when                                                                                 | Size |
 | --- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---- |
 | 0   | **Bootstrap**                | Create public repo, MIT license, README stub, this plan, monorepo scaffold, lint/format/typecheck, CI skeleton, branch protection, issue/PR templates, CONTRIBUTING/SECURITY/CoC                                                                                            | `pnpm i && pnpm build && pnpm test` pass locally and in CI                                | S    |
-| 1   | **Skeleton**                 | Fastify app, config loader (zod), DB layer (SQLite+PG), migrations runner, plugin host with lifecycle, event bus, health endpoints, Vue shell (router, PrimeVue, Tailwind, theme, i18n), Dockerfile                                                                         | Image starts, `/healthz` OK, empty shell renders, a sample plugin registers a route + tab | M    |
+| 1   | **Skeleton**                 | Fastify app, config loader (zod), DB layer (SQLite+PG), migrations runner, plugin host with lifecycle, event bus, health endpoints, Vue shell (router, @outpost/ui on shadcn-vue, Tailwind, theme, i18n), Dockerfile                                                        | Image starts, `/healthz` OK, empty shell renders, a sample plugin registers a route + tab | M    |
 | 2   | **Auth**                     | Setup token flow, local login, sessions, sudo mode, TOTP + backup codes, rate limits, invitations, OIDC + GitHub, profile pages, audit log core                                                                                                                             | e2e: setup → login → enable 2FA → relogin with TOTP; OIDC tested against a mock provider  | L    |
 | 3   | **Servers & RBAC**           | Permission registry, roles seed, memberships, server CRUD, secrets encryption, capability model, members UI, audit viewer                                                                                                                                                   | Viewer cannot call moderator APIs (tests for every route)                                 | M    |
 | 4   | **Drivers & Minecraft base** | Docker driver (containers + Swarm services, logs follow across restarts, inspect, events), socket-proxy examples, autodiscovery + wizard, RCON client, local files, Minecraft detection, RCON credentials from ENV/`.rcon-cli.env`, managed-settings locks, server overview | Wizard finds an itzg container in compose and in Swarm; "Test" shows ✓/✗ per binding      | L    |
@@ -643,12 +647,12 @@ generic recipe below becomes `docs/install/caprover.md`.
 
 ## 19. Risks and open questions
 
-| Risk / question                                                      | Mitigation / next step                                                                  |
-| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Log formats differ between versions, loaders and mods                | Rule table + fixtures per version; unparsed lines still shown                           |
-| Name resolution for never-joined offline players                     | File-based whitelist; pending actions for ban/op; integration tests                     |
-| Socket proxy allowlist details (Swarm service/task endpoints)        | Verify exact endpoints and proxy flags in Stage 4; document tested configs              |
-| Dual-dialect DB maintenance cost                                     | Restricted column helper + CI matrix; drop PG to "experimental" if it slows the MVP     |
-| Toolchain churn (TypeScript 7, Vite 8, PrimeVue 5 are recent majors) | TypeScript pinned to 6.0.x until typescript-eslint supports 7.x; Dependabot for updates |
-| Mojang/skin services availability & privacy                          | Only for avatars; configurable, cached, can be disabled                                 |
-| **Open**: npm scope for the future plugin SDK (`@outpost-panel/*`?)  | Decide before publishing any package                                                    |
+| Risk / question                                                        | Mitigation / next step                                                                       |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Log formats differ between versions, loaders and mods                  | Rule table + fixtures per version; unparsed lines still shown                                |
+| Name resolution for never-joined offline players                       | File-based whitelist; pending actions for ban/op; integration tests                          |
+| Socket proxy allowlist details (Swarm service/task endpoints)          | Verify exact endpoints and proxy flags in Stage 4; document tested configs                   |
+| Dual-dialect DB maintenance cost                                       | Kysely + restricted column types + CI on both; drop PG to "experimental" if it slows the MVP |
+| Toolchain churn (TypeScript 7, Vite 8, vue-router 5 are recent majors) | TypeScript pinned to 6.0.x until typescript-eslint supports 7.x; Dependabot for updates      |
+| Mojang/skin services availability & privacy                            | Only for avatars; configurable, cached, can be disabled                                      |
+| **Open**: npm scope for the future plugin SDK (`@outpost-panel/*`?)    | Decide before publishing any package                                                         |

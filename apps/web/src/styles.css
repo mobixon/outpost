@@ -1,0 +1,12 @@
+@import 'tailwindcss';
+@import '@outpost/ui/styles.css';
+
+/* Plugins and shared packages live outside this app; let Tailwind find the classes they use. */
+@source '../../../plugins';
+@source '../../../packages';
+
+html,
+body,
+#app {
+  height: 100%;
+}

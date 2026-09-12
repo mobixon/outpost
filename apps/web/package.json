@@ -1,0 +1,29 @@
+{
+  "name": "@outpost/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Outpost web UI shell",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "typecheck": "vue-tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.45.0",
+    "@outpost/plugin-about": "workspace:*",
+    "@outpost/shared": "workspace:*",
+    "@outpost/ui": "workspace:*",
+    "@outpost/web-plugin-api": "workspace:*",
+    "vue": "^3.5.42",
+    "vue-i18n": "^11.4.10",
+    "vue-router": "^5.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.0"
+  }
+}

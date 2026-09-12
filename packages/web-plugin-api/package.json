@@ -1,0 +1,26 @@
+{
+  "name": "@outpost/web-plugin-api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Public web UI contracts for Outpost plugins",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "vue-tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@outpost/shared": "workspace:*",
+    "zod": "^4.6.2"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0",
+    "vue-router": "^5.0.0"
+  },
+  "devDependencies": {
+    "vue": "^3.5.42",
+    "vue-router": "^5.3.1"
+  }
+}

@@ -2,3 +2,7 @@ packages:
   - apps/*
   - packages/*
   - plugins/*
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  vue-demi: false
