@@ -193,4 +193,11 @@ export const coreMigrations: readonly Migration[] = [
         .execute();
     },
   },
+  {
+    name: '0005_server_connections',
+    async up(db, { types }) {
+      await db.schema.alterTable('servers').addColumn('game', 'text').execute();
+      await db.schema.alterTable('servers').addColumn('connection', types.json).execute();
+    },
+  },
 ];

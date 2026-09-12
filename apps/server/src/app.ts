@@ -34,6 +34,7 @@ import { AuditLog } from './audit.js';
 import { createProviders, type GithubEndpoints } from './auth/providers.js';
 import { AuthService, toAuthenticatedUser } from './auth/service.js';
 import { findUserById } from './auth/users.js';
+import { ConnectionManager } from './connections/manager.js';
 import type { Config } from './config.js';
 import { createDatabase } from './db/connection.js';
 import { CORE_SCOPE, coreMigrations } from './db/core-migrations.js';
@@ -46,6 +47,7 @@ import { builtInPlugins } from './plugins/registry.js';
 import { PermissionRegistry } from './rbac/permissions.js';
 import { registerAuditRoutes } from './routes/audit.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerConnectionRoutes } from './routes/connection.js';
 import { registerExternalAuthRoutes } from './routes/external-auth.js';
 import { registerInvitationRoutes } from './routes/invitations.js';
 import { registerMeRoutes } from './routes/me.js';
@@ -91,8 +93,10 @@ export async function buildApp(
   const { db, dialect } = createDatabase(config.databaseUrl);
   let host: PluginHost | undefined;
   let pruneTimer: NodeJS.Timeout | undefined;
+  let connections: ConnectionManager | undefined;
   app.addHook('onClose', async () => {
     clearInterval(pruneTimer);
+    connections?.closeAll();
     await host?.stop();
     await db.destroy();
   });
@@ -134,7 +138,9 @@ export async function buildApp(
     });
 
     const registry = new PermissionRegistry();
-    const servers = new ServerService(db, registry, auth);
+    const servers = new ServerService(db, registry, auth, config.secretKey);
+    const connectionManager = new ConnectionManager((serverId) => servers.rconSettings(serverId));
+    connections = connectionManager;
     const events = createEventBus(app.log);
     const plugins = new PluginHost(
       resolvePlugins(options.plugins ?? builtInPlugins, config.plugins),
@@ -153,6 +159,9 @@ export async function buildApp(
             return server && servers.info(server);
           },
           list: async () => (await servers.list()).map((server) => servers.info(server)),
+        },
+        commands: {
+          send: (serverId, command) => connectionManager.send(serverId, command),
         },
         hasPermission: async (userId, serverId, permission) => {
           const user = await findUserById(db, userId);
@@ -184,6 +193,7 @@ export async function buildApp(
     registerMeRoutes(app, auth);
     registerUserRoutes(app, auth);
     registerServerRoutes(app, auth, servers);
+    registerConnectionRoutes(app, auth, servers, connectionManager);
     registerAuditRoutes(app, auth, registry);
     await plugins.start();
 

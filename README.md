@@ -11,22 +11,22 @@ Minecraft: Java Edition comes first.
 
 ## Why Outpost
 
-- **Attaches instead of taking over.** Works with servers you already run in Docker, Docker Compose
-  or Docker Swarm (e.g. CapRover) — no migration into a hosting panel.
+- **Attaches instead of taking over.** Connects to the servers you already run over RCON, wherever
+  they run — no migration into a hosting panel. Deeper Docker integration follows later.
 - **Modular.** Games and features are modules built on one public plugin API.
-- **Secure by default.** Read-only Docker access through a socket proxy, 2FA, per-server roles and
-  an audit log.
+- **Secure by default.** 2FA, per-server roles, an audit log, and RCON stays on your private
+  network.
 - **Lightweight.** One container and SQLite by default; PostgreSQL is optional.
 
 ## Planned for v0.1
 
-- **Live console** — real-time server output and commands over RCON.
-- **Players** — who is online, history, whitelist, ops, bans and kicks, with correct UUIDs for
-  offline-mode servers.
+- **Console** — commands and chat messages over RCON, with the replies.
+- **Players** — who is online, history, whitelist, ops, bans and kicks.
 - **Scheduler** — cron-scheduled commands and rotating chat announcements.
 - **Users and roles** — several users, per-server roles, local accounts with TOTP 2FA, invitation
   links, OIDC and GitHub login.
-- **Autodiscovery** of `itzg/minecraft-server` containers with a setup wizard.
+- **Connection over RCON**; a full connection through Docker (live log, files, autodiscovery) is on
+  the roadmap.
 - English and Russian interface.
 
 What comes after v0.1 is listed in the [roadmap](docs/PLAN.md#18-roadmap-after-v01).

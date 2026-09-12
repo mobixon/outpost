@@ -1,5 +1,6 @@
 import about from '@outpost/plugin-about/server';
+import consolePlugin from '@outpost/plugin-console/server';
 import type { PluginDefinition } from '@outpost/plugin-api';
 
 /** Plugins shipped with Outpost, in a stable registration order. */
-export const builtInPlugins: readonly PluginDefinition[] = [about];
+export const builtInPlugins: readonly PluginDefinition[] = [about, consolePlugin];

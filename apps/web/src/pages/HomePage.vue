@@ -81,6 +81,7 @@ onMounted(() => {
                 {{ server.role ? t(`roles.${server.role}`) : t('account.superadmin') }}
               </Badge>
               <Badge v-if="!server.connected" variant="outline">{{ t('home.notConnected') }}</Badge>
+              <Badge v-else variant="outline">RCON</Badge>
             </div>
           </CardHeader>
         </Card>

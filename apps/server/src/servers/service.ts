@@ -1,14 +1,37 @@
 import { randomUUID } from 'node:crypto';
 import { HttpError, type ServerInfo } from '@outpost/plugin-api';
-import type { RoleKey, ServerSummary } from '@outpost/shared';
+import {
+  gameIdSchema,
+  type ConnectionInfo,
+  type GameId,
+  type RoleKey,
+  type ServerSummary,
+} from '@outpost/shared';
 import type { FastifyRequest } from 'fastify';
 import type { Kysely, Selectable } from 'kysely';
+import { z } from 'zod';
+import { SecretBox } from '../auth/crypto.js';
 import type { AuthContext, AuthService } from '../auth/service.js';
 import type { UserRow } from '../auth/users.js';
 import type { CoreTables, ServersTable } from '../db/schema.js';
 import type { PermissionRegistry } from '../rbac/permissions.js';
 
 export type ServerRow = Selectable<ServersTable>;
+
+const storedConnectionSchema = z.object({
+  type: z.literal('rcon'),
+  host: z.string(),
+  port: z.number().int(),
+  /** Sealed with the key for server connections. */
+  password: z.string(),
+});
+export type StoredConnection = z.infer<typeof storedConnectionSchema>;
+
+export interface RconSettings {
+  host: string;
+  port: number;
+  password: string;
+}
 
 /** What a user may do on one server. */
 export interface ServerAccess {
@@ -27,11 +50,16 @@ type AccessUser = Pick<UserRow, 'id' | 'is_superadmin'>;
  * their role; superadmins see every server with every permission; everyone else sees nothing.
  */
 export class ServerService {
+  readonly #secrets: SecretBox;
+
   constructor(
     private readonly db: Kysely<CoreTables>,
     private readonly registry: PermissionRegistry,
     private readonly auth: AuthService,
-  ) {}
+    secretKey: string,
+  ) {
+    this.#secrets = new SecretBox(secretKey, 'server-connections');
+  }
 
   find(id: string) {
     return this.db.selectFrom('servers').selectAll().where('id', '=', id).executeTakeFirst();
@@ -100,20 +128,109 @@ export class ServerService {
     return { ...access, ctx };
   }
 
+  /** The stored connection; null when there is none or it cannot be read. */
+  connectionOf(server: ServerRow): StoredConnection | null {
+    if (server.connection === null) return null;
+    try {
+      return storedConnectionSchema.parse(JSON.parse(server.connection));
+    } catch {
+      return null;
+    }
+  }
+
+  gameOf(server: ServerRow): GameId | null {
+    return gameIdSchema.safeParse(server.game).data ?? null;
+  }
+
+  /** What the server supports with its connection: an RCON connection sends commands. */
+  capabilities(server: ServerRow): string[] {
+    return this.connectionOf(server)?.type === 'rcon' ? ['commands.send'] : [];
+  }
+
+  connectionInfo(server: ServerRow): ConnectionInfo | null {
+    const connection = this.connectionOf(server);
+    const game = this.gameOf(server);
+    if (connection === null || game === null) return null;
+    return {
+      type: connection.type,
+      game,
+      host: connection.host,
+      port: connection.port,
+      hasPassword: connection.password !== '',
+    };
+  }
+
+  /** Stores an RCON connection; without a new password the stored one is kept. */
+  async saveConnection(
+    server: ServerRow,
+    input: { game: GameId; host: string; port: number; password?: string | undefined },
+  ): Promise<void> {
+    const password =
+      input.password !== undefined
+        ? this.#secrets.seal(input.password)
+        : this.connectionOf(server)?.password;
+    if (password === undefined) {
+      throw new HttpError(400, 'rcon_password_required', 'Enter the RCON password');
+    }
+    const connection: StoredConnection = {
+      type: 'rcon',
+      host: input.host,
+      port: input.port,
+      password,
+    };
+    await this.db
+      .updateTable('servers')
+      .set({ game: input.game, connection: JSON.stringify(connection), updated_at: Date.now() })
+      .where('id', '=', server.id)
+      .execute();
+  }
+
+  async removeConnection(id: string): Promise<void> {
+    await this.db
+      .updateTable('servers')
+      .set({ connection: null, updated_at: Date.now() })
+      .where('id', '=', id)
+      .execute();
+  }
+
+  /** The stored RCON password in plain text. */
+  openPassword(connection: StoredConnection): string {
+    return this.#secrets.open(connection.password);
+  }
+
+  /** Where and how to reach the server over RCON; undefined without a connection. */
+  async rconSettings(serverId: string): Promise<RconSettings | undefined> {
+    const server = await this.find(serverId);
+    const connection = server === undefined ? null : this.connectionOf(server);
+    if (connection === null) return undefined;
+    return {
+      host: connection.host,
+      port: connection.port,
+      password: this.openPassword(connection),
+    };
+  }
+
   info(server: ServerRow): ServerInfo {
-    // Capabilities come from the runtime, channel and game module of the connection (Stage 4).
-    return { id: server.id, slug: server.slug, name: server.name, capabilities: [] };
+    return {
+      id: server.id,
+      slug: server.slug,
+      name: server.name,
+      capabilities: this.capabilities(server),
+    };
   }
 
   summary({ server, role, permissions }: ServerAccess): ServerSummary {
+    const connection = this.connectionOf(server);
     return {
       id: server.id,
       slug: server.slug,
       name: server.name,
       role,
       permissions: [...permissions].sort(),
-      capabilities: [],
-      connected: false,
+      capabilities: this.capabilities(server),
+      connected: connection !== null,
+      connectionType: connection?.type ?? null,
+      game: this.gameOf(server),
       createdAt: new Date(server.created_at).toISOString(),
     };
   }
@@ -130,6 +247,8 @@ export class ServerService {
       id: randomUUID(),
       slug: input.slug,
       name: input.name,
+      game: null,
+      connection: null,
       created_at: now,
       updated_at: now,
     };

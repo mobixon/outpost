@@ -43,7 +43,7 @@ export function sessionCookie(response: LightMyRequestResponse): string {
 /** A state-changing request with the CSRF header, optionally signed in. */
 export function send(
   server: FastifyInstance,
-  method: 'POST' | 'PATCH' | 'DELETE',
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string,
   options: { body?: object; cookie?: string } = {},
 ) {

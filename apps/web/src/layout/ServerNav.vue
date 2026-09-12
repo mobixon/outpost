@@ -19,8 +19,9 @@ const { t } = useI18n();
           active-class="bg-sidebar-accent !text-sidebar-primary"
         >
           <span
-            class="bg-muted-foreground/40 size-2 shrink-0 rounded-full"
-            :title="t('home.notConnected')"
+            class="size-2 shrink-0 rounded-full"
+            :class="server.connected ? 'bg-primary' : 'bg-muted-foreground/40'"
+            :title="server.connected ? 'RCON' : t('home.notConnected')"
             aria-hidden="true"
           />
           <span class="truncate">{{ server.name }}</span>

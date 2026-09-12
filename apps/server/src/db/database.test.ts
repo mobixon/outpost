@@ -52,6 +52,7 @@ describe.each(targets)('database ($name)', ({ url }) => {
       'outpost.core/0002_auth',
       'outpost.core/0003_external_auth',
       'outpost.core/0004_servers',
+      'outpost.core/0005_server_connections',
     ]);
     expect(typeof rows[0]?.applied_at).toBe('number');
   });

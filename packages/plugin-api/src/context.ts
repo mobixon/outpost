@@ -46,6 +46,14 @@ export interface PluginContext {
     get(id: string): Promise<ServerInfo | undefined>;
     list(): Promise<ServerInfo[]>;
   };
+  readonly commands: {
+    /**
+     * Runs a console command on the server over its connection and returns the reply (often
+     * empty). Throws an HttpError: 409 without a connection, 400 for a command that is too long
+     * and 502 when the server cannot be reached.
+     */
+    send(serverId: string, command: string): Promise<string>;
+  };
   readonly permissions: {
     /** Whether the user has the permission on the server; superadmins have all. */
     has(userId: string, serverId: string, permission: string): Promise<boolean>;

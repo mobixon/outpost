@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export * from './admin.js';
 export * from './auth.js';
+export * from './connection.js';
 export * from './servers.js';
 
 /** Base path of the HTTP API. */
@@ -18,6 +19,11 @@ export function isValidPluginId(id: string): boolean {
 /** URL of a plugin's HTTP route, e.g. `pluginApiPath('outpost.about', '/info')`. */
 export function pluginApiPath(pluginId: string, path = ''): string {
   return `${API_PREFIX}/plugins/${pluginId}${path}`;
+}
+
+/** URL of a plugin's route of one game server (see `ctx.http.serverRoute`). */
+export function serverPluginApiPath(serverId: string, pluginId: string, path = ''): string {
+  return `${API_PREFIX}/servers/${encodeURIComponent(serverId)}/plugins/${pluginId}${path}`;
 }
 
 export const pluginInfoSchema = z.object({

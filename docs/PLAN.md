@@ -1,6 +1,7 @@
 # Outpost — Project Plan (v0.1 / MVP)
 
-> Status: **approved** · Date: 2026-09-12 · Owner: @mobixon
+> Status: **approved** · Date: 2026-09-12 · Revised: 2026-09-13 (D20: v0.1 connects over RCON
+> only) · Owner: @mobixon
 >
 > Outpost is an open-source, modular web admin panel for game servers.
 > The first supported game is **Minecraft: Java Edition**.
@@ -17,13 +18,15 @@ touching the core.
 
 ### 1.1 Goals for v0.1 (MVP)
 
-- Attach to existing Minecraft Java servers running in Docker (containers or Swarm services).
-- **Live console**: real-time server output + sending commands.
-- **Players**: online list, history, whitelist, ops, bans, kick — with correct UUIDs in offline mode.
+- Attach to existing Minecraft Java servers over **RCON**, however they are run (Docker, CapRover,
+  bare metal); the full connection through Docker follows after v0.1 (D20).
+- **Console**: commands and chat messages with the replies (the live server log comes with the
+  full connection).
+- **Players**: online list, history, whitelist, ops, bans, kick — over RCON.
 - **Scheduler**: cron-scheduled commands and rotating chat announcements.
 - **Multi-user**: several users, per-server roles built on a permission system, audit log.
-- **Secure by default**: argon2id passwords, TOTP 2FA, OIDC/GitHub login, read-only Docker access.
-- **Easy to install**: one Docker image + one socket-proxy container, SQLite by default.
+- **Secure by default**: argon2id passwords, TOTP 2FA, OIDC/GitHub login, RCON kept off the internet.
+- **Easy to install**: one Docker image, SQLite by default.
 - EN + RU user interface.
 - Light + Dark theme(remember for user or in local storage for public auth page)
 
@@ -38,27 +41,28 @@ from the panel.
 
 ## 2. Decision log
 
-| #   | Topic                       | Decision                                                                                                         | Why                                                                                                                                          |
-| --- | --------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| D1  | Control model               | **Core + drivers**: runtime driver (Docker) + command channel (RCON) + file access                               | Works with servers users already run (incl. CapRover); creating servers / agents can be added later as more drivers                          |
-| D2  | Stack                       | **TypeScript** end-to-end, Node.js 24 LTS                                                                        | One language, modules as npm packages, first-class WebSocket; lowest barrier for contributors                                                |
-| D3  | Modularity                  | **Monorepo**; built-in modules use the same public Plugin API that third-party plugins will use later            | Keeps the API honest without committing to a stable external ABI in v0.1                                                                     |
-| D4  | Scale                       | Many servers, many users, per-server roles, global superadmin, audit log                                         | Expected minimum for a public product                                                                                                        |
-| D5  | MVP features                | Console, Players, Scheduler (cron commands + announcements)                                                      | Owner's priority                                                                                                                             |
-| D6  | Externally managed settings | **Hybrid with locks**: settings controlled by container ENV are shown locked with the reason                     | Nothing gets silently overwritten on restart                                                                                                 |
-| D7  | Login                       | Local accounts (argon2id) + TOTP 2FA + backup codes; generic **OIDC** and **GitHub** login                       | Standard for self-hosted admin tools                                                                                                         |
-| D8  | Console source              | **Docker logs** through a **read-only socket proxy**                                                             | Full output incl. startup/crashes; `inspect` gives ENV needed for D6; not root-equivalent                                                    |
-| D9  | Player data                 | RCON + panel's own history parsed from logs + direct JSON writes where safe                                      | Fixes the offline-mode UUID problem; enables player cards                                                                                    |
-| D10 | Database                    | **SQLite by default**, optional **PostgreSQL** via `DATABASE_URL`; Kysely query builder                          | Zero-config self-hosting, scalable option                                                                                                    |
-| D11 | Backend                     | **Fastify 5** + own framework-agnostic Plugin API                                                                | Light, fast, encapsulated plugins, good WS support                                                                                           |
-| D12 | License                     | **MIT**                                                                                                          | Maximum adoption                                                                                                                             |
-| D13 | Name                        | **Outpost** — repo `github.com/mobixon/outpost`, image `ghcr.io/mobixon/outpost`                                 | Name checked free on GitHub; unscoped npm `outpost` is taken → scoped npm packages when an SDK is published                                  |
-| D14 | UI languages                | EN (default) + RU via `vue-i18n`; modules ship their own messages                                                | Community can add locales                                                                                                                    |
-| D15 | UI kit                      | **shadcn-vue components on Reka UI + Tailwind CSS** (MIT), kept in `@outpost/ui`; Lucide icons; light/dark theme | Components live in our repo, plugins use our `@outpost/ui` API; PrimeVue was dropped because v5 became proprietary (license key, OEM clause) |
-| D16 | Roles                       | Built-in role presets (owner/admin/moderator/viewer) defined as permission sets; role editor later               | Data model ready for custom roles                                                                                                            |
-| D17 | Server onboarding           | **Wizard + autodiscovery** of Docker containers/services, manual add also possible                               | Beginners avoid misconfiguration                                                                                                             |
-| D18 | EasyAuth integration        | Roadmap — first post-MVP module                                                                                  | Also validates the Plugin API on a real case                                                                                                 |
-| D19 | Workflow                    | **Each stage = branch + PR with CI**, owner merges                                                               | Clean public history, review per stage                                                                                                       |
+| #   | Topic                       | Decision                                                                                                                                            | Why                                                                                                                                           |
+| --- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | Control model               | **Core + drivers**: runtime driver (Docker) + command channel (RCON) + file access                                                                  | Works with servers users already run (incl. CapRover); creating servers / agents can be added later as more drivers                           |
+| D2  | Stack                       | **TypeScript** end-to-end, Node.js 24 LTS                                                                                                           | One language, modules as npm packages, first-class WebSocket; lowest barrier for contributors                                                 |
+| D3  | Modularity                  | **Monorepo**; built-in modules use the same public Plugin API that third-party plugins will use later                                               | Keeps the API honest without committing to a stable external ABI in v0.1                                                                      |
+| D4  | Scale                       | Many servers, many users, per-server roles, global superadmin, audit log                                                                            | Expected minimum for a public product                                                                                                         |
+| D5  | MVP features                | Console, Players, Scheduler (cron commands + announcements)                                                                                         | Owner's priority                                                                                                                              |
+| D6  | Externally managed settings | **Hybrid with locks**: settings controlled by container ENV are shown locked with the reason                                                        | Nothing gets silently overwritten on restart                                                                                                  |
+| D7  | Login                       | Local accounts (argon2id) + TOTP 2FA + backup codes; generic **OIDC** and **GitHub** login                                                          | Standard for self-hosted admin tools                                                                                                          |
+| D8  | Console source              | **Docker logs** through a **read-only socket proxy**                                                                                                | Full output incl. startup/crashes; `inspect` gives ENV needed for D6; not root-equivalent                                                     |
+| D9  | Player data                 | RCON + panel's own history parsed from logs + direct JSON writes where safe                                                                         | Fixes the offline-mode UUID problem; enables player cards                                                                                     |
+| D10 | Database                    | **SQLite by default**, optional **PostgreSQL** via `DATABASE_URL`; Kysely query builder                                                             | Zero-config self-hosting, scalable option                                                                                                     |
+| D11 | Backend                     | **Fastify 5** + own framework-agnostic Plugin API                                                                                                   | Light, fast, encapsulated plugins, good WS support                                                                                            |
+| D12 | License                     | **MIT**                                                                                                                                             | Maximum adoption                                                                                                                              |
+| D13 | Name                        | **Outpost** — repo `github.com/mobixon/outpost`, image `ghcr.io/mobixon/outpost`                                                                    | Name checked free on GitHub; unscoped npm `outpost` is taken → scoped npm packages when an SDK is published                                   |
+| D14 | UI languages                | EN (default) + RU via `vue-i18n`; modules ship their own messages                                                                                   | Community can add locales                                                                                                                     |
+| D15 | UI kit                      | **shadcn-vue components on Reka UI + Tailwind CSS** (MIT), kept in `@outpost/ui`; Lucide icons; light/dark theme                                    | Components live in our repo, plugins use our `@outpost/ui` API; PrimeVue was dropped because v5 became proprietary (license key, OEM clause)  |
+| D16 | Roles                       | Built-in role presets (owner/admin/moderator/viewer) defined as permission sets; role editor later                                                  | Data model ready for custom roles                                                                                                             |
+| D17 | Server onboarding           | **Wizard + autodiscovery** of Docker containers/services, manual add also possible                                                                  | Beginners avoid misconfiguration                                                                                                              |
+| D18 | EasyAuth integration        | Roadmap — first post-MVP module                                                                                                                     | Also validates the Plugin API on a real case                                                                                                  |
+| D19 | Workflow                    | **Each stage = branch + PR with CI**, owner merges                                                                                                  | Clean public history, review per stage                                                                                                        |
+| D20 | Connection in v0.1          | **RCON only.** The server settings offer the connection types **RCON** (implemented) and **Full** (Docker, live log, files — shown as coming later) | Shorter MVP (owner's decision at Stage 4). Replaces D8, D17 and the file part of D9 for v0.1; they move to the roadmap as the full connection |
 
 Defaults chosen without a separate question (conventional choices, can be revisited in review):
 pnpm workspaces · ESM · Vue 3 + Vite + Vue Router + Pinia · zod schemas shared by server and web ·
@@ -264,6 +268,10 @@ format and a trust model).
 
 ## 6. Minecraft Java module (`game-minecraft`)
 
+> **v0.1 (D20):** servers are connected over RCON only. Detection (6.1), log parsing (6.2), the
+> file-based parts of 6.3 and the live log of 6.4 belong to the full connection on the roadmap;
+> v0.1 uses the RCON parts: commands, `list`, whitelist, ops, bans and kicks through RCON.
+
 Facts below were verified against a live server (Minecraft 26.2, Fabric, itzg image) in September 2026.
 
 ### 6.1 Detection (autodiscovery)
@@ -355,6 +363,9 @@ failure (surface a clear error in the UI).
 ---
 
 ## 7. Managed settings (hybrid locks, D6)
+
+> **Roadmap (D20):** the locks need the container's ENV from Docker, so they arrive with the full
+> connection.
 
 For itzg-based servers Outpost computes which `server.properties` keys are controlled by container
 ENV and therefore would be overwritten on restart:
@@ -533,7 +544,7 @@ when roles change (server pushes `unsub`).
 | `OUTPOST_SECRET_KEY`                  | — (required)                  | 32+ byte key for encryption/signing                  |
 | `OUTPOST_PUBLIC_URL`                  | — (required)                  | External URL (cookies, OIDC redirects, Origin check) |
 | `DATABASE_URL`                        | `sqlite:///data/outpost.db`   | Or `postgres://…`                                    |
-| `DOCKER_HOST`                         | `unix:///var/run/docker.sock` | Recommended: `tcp://socket-proxy:2375`               |
+| `DOCKER_HOST`                         | `unix:///var/run/docker.sock` | Full connection (roadmap): `tcp://socket-proxy:2375` |
 | `OUTPOST_TRUST_PROXY`                 | `false`                       | Trust `X-Forwarded-*` from a reverse proxy           |
 | `OUTPOST_LOG_LEVEL`                   | `info`                        | pino level                                           |
 | `OUTPOST_OIDC_*` / `OUTPOST_GITHUB_*` | —                             | External login providers                             |
@@ -547,7 +558,7 @@ keep correct ownership); configurable via `--user`.
 
 ## 14. Security model (summary)
 
-- **Docker access**: never mount the raw socket in recommended setups. Use a socket proxy with a
+- **Docker access** (full connection, roadmap): never mount the raw socket in recommended setups. Use a socket proxy with a
   **GET-only allowlist**; the docker driver addresses containers by name so the allowlist can be
   scoped per server (regex like `^/v1\.\d+/containers/srv-captain--mc[^/]*/(json|logs)$`).
   Reason: `inspect` returns ENV, and ENV of other apps can contain secrets. Recommended proxy:
@@ -592,18 +603,18 @@ keep correct ownership); configurable via `--user`.
 Every stage ends with: green CI, updated docs, a short demo in the PR description, owner review and
 merge. Size is relative (S/M/L).
 
-| #   | Stage                        | Scope                                                                                                                                                                                                                                                                       | Done when                                                                                 | Size |
-| --- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---- |
-| 0   | **Bootstrap**                | Create public repo, MIT license, README stub, this plan, monorepo scaffold, lint/format/typecheck, CI skeleton, branch protection, issue/PR templates, CONTRIBUTING/SECURITY/CoC                                                                                            | `pnpm i && pnpm build && pnpm test` pass locally and in CI                                | S    |
-| 1   | **Skeleton**                 | Fastify app, config loader (zod), DB layer (SQLite+PG), migrations runner, plugin host with lifecycle, event bus, health endpoints, Vue shell (router, @outpost/ui on shadcn-vue, Tailwind, theme, i18n), Dockerfile                                                        | Image starts, `/healthz` OK, empty shell renders, a sample plugin registers a route + tab | M    |
-| 2   | **Auth**                     | Setup token flow, local login, sessions, sudo mode, TOTP + backup codes, rate limits, invitations, OIDC + GitHub, profile pages, audit log core                                                                                                                             | e2e: setup → login → enable 2FA → relogin with TOTP; OIDC tested against a mock provider  | L    |
-| 3   | **Servers & RBAC**           | Permission registry, roles seed, memberships, server CRUD, secrets encryption, capability model, members UI, audit viewer                                                                                                                                                   | Viewer cannot call moderator APIs (tests for every route)                                 | M    |
-| 4   | **Drivers & Minecraft base** | Docker driver (containers + Swarm services, logs follow across restarts, inspect, events), socket-proxy examples, autodiscovery + wizard, RCON client, local files, Minecraft detection, RCON credentials from ENV/`.rcon-cli.env`, managed-settings locks, server overview | Wizard finds an itzg container in compose and in Swarm; "Test" shows ✓/✗ per binding      | L    |
-| 5   | **Console**                  | Log ring buffer, WS channel, LogView component, command input + completion, chat via tellraw, audit                                                                                                                                                                         | Live output < 1 s latency; commands and replies work; reconnect after container restart   | M    |
-| 6   | **Players**                  | Online list, history from events, player card, whitelist (offline UUID file write + reload), UUID doctor, ops/bans with pending actions, kick, ban-ip                                                                                                                       | Integration tests on a real offline-mode server incl. never-joined player                 | L    |
-| 7   | **Scheduler**                | Task CRUD, cron preview, command + announcement types, run history, run now                                                                                                                                                                                                 | Tasks fire on time across TZs; skipped when RCON down                                     | M    |
-| 8   | **Hardening & v0.1.0**       | Security review, e2e suite, docs complete, RU translation complete, release pipeline, screenshots                                                                                                                                                                           | `v0.1.0` published on GHCR + GitHub Release                                               | M    |
-| 9   | **Reference deployment**     | Deploy the release on the maintainer's CapRover server and manage a real Minecraft server with it (§17)                                                                                                                                                                     | Panel runs in production behind HTTPS with 2FA; issues found are fixed                    | S    |
+| #   | Stage                         | Scope                                                                                                                                                                                                                                                                                                                                                                                                                     | Done when                                                                                                       | Size |
+| --- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---- |
+| 0   | **Bootstrap**                 | Create public repo, MIT license, README stub, this plan, monorepo scaffold, lint/format/typecheck, CI skeleton, branch protection, issue/PR templates, CONTRIBUTING/SECURITY/CoC                                                                                                                                                                                                                                          | `pnpm i && pnpm build && pnpm test` pass locally and in CI                                                      | S    |
+| 1   | **Skeleton**                  | Fastify app, config loader (zod), DB layer (SQLite+PG), migrations runner, plugin host with lifecycle, event bus, health endpoints, Vue shell (router, @outpost/ui on shadcn-vue, Tailwind, theme, i18n), Dockerfile                                                                                                                                                                                                      | Image starts, `/healthz` OK, empty shell renders, a sample plugin registers a route + tab                       | M    |
+| 2   | **Auth**                      | Setup token flow, local login, sessions, sudo mode, TOTP + backup codes, rate limits, invitations, OIDC + GitHub, profile pages, audit log core                                                                                                                                                                                                                                                                           | e2e: setup → login → enable 2FA → relogin with TOTP; OIDC tested against a mock provider                        | L    |
+| 3   | **Servers & RBAC**            | Permission registry, roles seed, memberships, server CRUD, secrets encryption, capability model, members UI, audit viewer                                                                                                                                                                                                                                                                                                 | Viewer cannot call moderator APIs (tests for every route)                                                       | M    |
+| 4   | **RCON connection & console** | Connection type in the server settings: **RCON** (implemented) or **Full** (Docker, live log, files — shown as coming later); own RCON client (split replies, request size limit, timeouts), per-server connection manager, encrypted RCON password, connection test, server status with players online, `ctx.commands` for modules; console module: commands and replies, history, completion, chat via `tellraw`, audit | "Test" shows ✓/✗ per step; commands and chat work against a real itzg server in CI                              | M    |
+| 5   | ~~Console~~                   | Merged into Stage 4 as the RCON console; the live log comes with the full connection (roadmap)                                                                                                                                                                                                                                                                                                                            | —                                                                                                               | —    |
+| 6   | **Players**                   | Over RCON: online list (`list` polling), history from polling (joins, leaves, playtime; no IPs), player card, whitelist add/remove and on/off, ops, bans, kick, ban-ip; pending actions applied when a player is seen online                                                                                                                                                                                              | Tests against a real itzg server; the offline-mode whitelist of never-joined players is a documented limitation | M    |
+| 7   | **Scheduler**                 | Task CRUD, cron preview, command + announcement types, run history, run now                                                                                                                                                                                                                                                                                                                                               | Tasks fire on time across TZs; skipped when RCON down                                                           | M    |
+| 8   | **Hardening & v0.1.0**        | Security review, e2e suite, docs complete, RU translation complete, release pipeline, screenshots                                                                                                                                                                                                                                                                                                                         | `v0.1.0` published on GHCR + GitHub Release                                                                     | M    |
+| 9   | **Reference deployment**      | Deploy the release on the maintainer's CapRover server and manage a real Minecraft server with it (§17)                                                                                                                                                                                                                                                                                                                   | Panel runs in production behind HTTPS with 2FA; issues found are fixed                                          | S    |
 
 ---
 
@@ -613,51 +624,50 @@ Stage 9 deploys a release on the maintainer's own CapRover server (Docker Swarm,
 manage a real Minecraft server. Environment-specific details stay outside this repository; the
 generic recipe below becomes `docs/install/caprover.md`.
 
-1. **Socket proxy** — an app running `wollomatic/socket-proxy` with `/var/run/docker.sock` mounted
-   from the host, no public domain, GET-only allowlist scoped to the game server's service, tasks
-   and containers (`json`, `logs`) plus `_ping`, `version` and `events`.
-2. **Outpost** — an app running `ghcr.io/mobixon/outpost:<version>`:
+1. **Outpost** — an app running `ghcr.io/mobixon/outpost:<version>`:
    - persistent volume → `/data` (SQLite database);
-   - the game server's data directory (host path) → `/servers/<name>` (read-write, UID 1000);
-   - env: `OUTPOST_SECRET_KEY`, `OUTPOST_PUBLIC_URL`,
-     `DOCKER_HOST=tcp://srv-captain--<proxy-app>:2375`, `OUTPOST_TRUST_PROXY=true`, `TZ`;
+   - env: `OUTPOST_SECRET_KEY`, `OUTPOST_PUBLIC_URL`, `OUTPOST_TRUST_PROXY=true`, `TZ`;
    - a domain with HTTPS (force HTTPS) and WebSocket support enabled;
    - no extra public ports: RCON stays on the internal overlay network.
-3. **First run** — read the setup token from the app log, create the superadmin, enable 2FA.
-4. **Connect the server** with the wizard (autodiscovery; RCON password from ENV or
-   `.rcon-cli.env`), run the connection test, fix whitelist UUIDs with the UUID doctor if needed,
-   invite moderators.
-5. **Operations** — include the Outpost volume in backups; update by deploying a newer pinned tag.
+2. **First run** — read the setup token from the app log, create the superadmin, enable 2FA.
+3. **Connect the server** — add it, then Settings → Connection: RCON with the host
+   `srv-captain--<game app>`, port 25575 and the password (`RCON_PASSWORD`, or `password=` in
+   `.rcon-cli.env` in the data directory of the game server); "Test", save, invite moderators.
+4. **Operations** — include the Outpost volume in backups; update by deploying a newer pinned tag.
 
 ---
 
 ## 18. Roadmap after v0.1
 
-1. **EasyAuth module** (registered accounts, password reset) — first "external-style" plugin.
-2. **Lifecycle & metrics**: start/stop/restart (Swarm: scale 0/1; containers: start/stop), CPU/RAM
+1. **Full connection** (D20): Docker driver through a read-only socket proxy (containers and Swarm
+   services), live server log in the console, log-based player history with IPs, autodiscovery and
+   setup wizard, file access (offline-mode whitelist, UUID doctor), managed-settings locks (§7).
+2. **EasyAuth module** (registered accounts, password reset) — first "external-style" plugin.
+3. **Lifecycle & metrics**: start/stop/restart (Swarm: scale 0/1; containers: start/stop), CPU/RAM
    from Docker stats, TPS/MSPT via RCON; requires a write-capable proxy allowlist (documented risk).
-3. **Scheduled restart with warnings** and **task chains** (steps, delays, conditions).
-4. **File manager** + **`server.properties` editor** using the lock service.
-5. **Backups** (save-off/save-all → archive → save-on, rotation, restore, S3).
-6. **Mods/plugins via Modrinth** (search, install, update, compatibility by version/loader; itzg
+4. **Scheduled restart with warnings** and **task chains** (steps, delays, conditions).
+5. **File manager** + **`server.properties` editor** using the lock service.
+6. **Backups** (save-off/save-all → archive → save-on, rotation, restore, S3).
+7. **Mods/plugins via Modrinth** (search, install, update, compatibility by version/loader; itzg
    `MODRINTH_PROJECTS` awareness).
-7. **Statistics & notifications** (online/TPS charts, Discord/Telegram webhooks).
-8. Custom role editor, personal API tokens, passkeys (WebAuthn).
-9. **External plugins** loaded at runtime (npm, versioned API, signatures, trust prompts).
-10. More drivers: file-tail logs, systemd/bare process, remote **agent** for multi-host.
-11. More games (Source-RCON games, Valheim, Rust, …), Minecraft Bedrock, panel-created servers,
+8. **Statistics & notifications** (online/TPS charts, Discord/Telegram webhooks).
+9. Custom role editor, personal API tokens, passkeys (WebAuthn).
+10. **External plugins** loaded at runtime (npm, versioned API, signatures, trust prompts).
+11. More drivers: file-tail logs, systemd/bare process, remote **agent** for multi-host.
+12. More games (Source-RCON games, Valheim, Rust, …), Minecraft Bedrock, panel-created servers,
     GitOps module (commit config changes to a repo).
 
 ---
 
 ## 19. Risks and open questions
 
-| Risk / question                                                        | Mitigation / next step                                                                       |
-| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Log formats differ between versions, loaders and mods                  | Rule table + fixtures per version; unparsed lines still shown                                |
-| Name resolution for never-joined offline players                       | File-based whitelist; pending actions for ban/op; integration tests                          |
-| Socket proxy allowlist details (Swarm service/task endpoints)          | Verify exact endpoints and proxy flags in Stage 4; document tested configs                   |
-| Dual-dialect DB maintenance cost                                       | Kysely + restricted column types + CI on both; drop PG to "experimental" if it slows the MVP |
-| Toolchain churn (TypeScript 7, Vite 8, vue-router 5 are recent majors) | TypeScript pinned to 6.0.x until typescript-eslint supports 7.x; Dependabot for updates      |
-| Mojang/skin services availability & privacy                            | Only for avatars; configurable, cached, can be disabled                                      |
-| **Open**: npm scope for the future plugin SDK (`@outpost-panel/*`?)    | Decide before publishing any package                                                         |
+| Risk / question                                                                   | Mitigation / next step                                                                        |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Log formats differ between versions, loaders and mods                             | Rule table + fixtures per version; unparsed lines still shown                                 |
+| Name resolution for never-joined offline players                                  | File-based whitelist; pending actions for ban/op; integration tests                           |
+| Socket proxy allowlist details (Swarm service/task endpoints)                     | Verify exact endpoints and proxy flags with the full connection; document tested configs      |
+| Offline mode: RCON `whitelist add` stores the online UUID of never-joined players | Documented limitation of the RCON connection; the file access of the full connection fixes it |
+| Dual-dialect DB maintenance cost                                                  | Kysely + restricted column types + CI on both; drop PG to "experimental" if it slows the MVP  |
+| Toolchain churn (TypeScript 7, Vite 8, vue-router 5 are recent majors)            | TypeScript pinned to 6.0.x until typescript-eslint supports 7.x; Dependabot for updates       |
+| Mojang/skin services availability & privacy                                       | Only for avatars; configurable, cached, can be disabled                                       |
+| **Open**: npm scope for the future plugin SDK (`@outpost-panel/*`?)               | Decide before publishing any package                                                          |

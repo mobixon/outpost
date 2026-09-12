@@ -13,6 +13,7 @@
   "dependencies": {
     "@lucide/vue": "^1.45.0",
     "@outpost/plugin-about": "workspace:*",
+    "@outpost/plugin-console": "workspace:*",
     "@outpost/shared": "workspace:*",
     "@outpost/ui": "workspace:*",
     "@outpost/web-plugin-api": "workspace:*",
