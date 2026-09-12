@@ -1,10 +1,12 @@
 import { API_PREFIX, healthSchema, pluginListSchema, readinessSchema } from '@outpost/shared';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { PluginHost } from '../plugins/host.js';
 
 export interface SystemRouteDeps {
   plugins: PluginHost;
+  /** Throws the 401/403 answer unless a user with a complete login made the request. */
+  requireUser(request: FastifyRequest): unknown;
   checkDatabase(): Promise<boolean>;
 }
 
@@ -32,7 +34,10 @@ export function registerSystemRoutes(fastify: FastifyInstance, deps: SystemRoute
   app.get(
     `${API_PREFIX}/plugins`,
     { schema: { tags: ['system'], response: { 200: pluginListSchema } } },
-    async () => ({ plugins: deps.plugins.list() }),
+    async (request) => {
+      deps.requireUser(request);
+      return { plugins: deps.plugins.list() };
+    },
   );
 
   app.get(`${API_PREFIX}/openapi.json`, { schema: { hide: true } }, async () => fastify.swagger());

@@ -51,7 +51,20 @@ OUTPOST_DOCKER_ARGS="-p 5173:5173" scripts/in-docker.sh pnpm dev
 ```
 
 The development database is `apps/server/.data/outpost.db` (SQLite); delete it to start from
-scratch. All settings are described in [docs/configuration.md](docs/configuration.md).
+scratch. On the first start the server log shows the setup token for creating the first account.
+All settings are described in [docs/configuration.md](docs/configuration.md).
+
+### End-to-end tests
+
+The `e2e/` package drives a running Outpost with Playwright. CI builds the Docker image, starts it
+and runs the tests against it. Locally, start a fresh instance (for example the image with
+`OUTPOST_SETUP_TOKEN` set) and run:
+
+```sh
+OUTPOST_E2E_URL=http://localhost:3000 OUTPOST_E2E_SETUP_TOKEN=<token> pnpm --filter @outpost/e2e test
+```
+
+The tests create the first account, so they need an instance without accounts.
 
 ## Repository layout
 

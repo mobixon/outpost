@@ -1,0 +1,15 @@
+{
+  "name": "@outpost/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "End-to-end tests of Outpost in a real browser",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

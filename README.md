@@ -37,11 +37,16 @@ There are no published images yet. To build and run the current state:
 
 ```sh
 docker build -t outpost .
-docker run --rm -p 3000:3000 -v outpost-data:/data outpost
+docker run --rm -p 3000:3000 -v outpost-data:/data \
+  -e OUTPOST_SECRET_KEY="$(openssl rand -base64 48)" \
+  -e OUTPOST_PUBLIC_URL=http://localhost:3000 \
+  outpost
 ```
 
-Then open <http://localhost:3000>. Settings are listed in
-[docs/configuration.md](docs/configuration.md).
+Then open <http://localhost:3000> and create the administrator with the setup token printed in the
+log. Settings are listed in [docs/configuration.md](docs/configuration.md), login and security in
+[docs/authentication.md](docs/authentication.md). Keep the same `OUTPOST_SECRET_KEY` across restarts:
+it encrypts secrets stored in the database.
 
 ## Development
 

@@ -18,4 +18,66 @@ export const coreMigrations: readonly Migration[] = [
         .execute();
     },
   },
+  {
+    name: '0002_auth',
+    async up(db, { types }) {
+      await db.schema
+        .createTable('users')
+        .addColumn('id', 'text', (column) => column.primaryKey())
+        .addColumn('username', 'text', (column) => column.notNull().unique())
+        .addColumn('password_hash', 'text')
+        .addColumn('is_superadmin', types.boolean, (column) => column.notNull().defaultTo(0))
+        .addColumn('totp_secret', 'text')
+        .addColumn('totp_pending_secret', 'text')
+        .addColumn('totp_last_step', 'bigint')
+        .addColumn('totp_enabled_at', types.timestamp)
+        .addColumn('disabled_at', types.timestamp)
+        .addColumn('created_at', types.timestamp, (column) => column.notNull())
+        .addColumn('updated_at', types.timestamp, (column) => column.notNull())
+        .execute();
+
+      await db.schema
+        .createTable('user_backup_codes')
+        .addColumn('user_id', 'text', (column) =>
+          column.notNull().references('users.id').onDelete('cascade'),
+        )
+        .addColumn('code_hash', 'text', (column) => column.notNull())
+        .addColumn('used_at', types.timestamp)
+        .addPrimaryKeyConstraint('user_backup_codes_pk', ['user_id', 'code_hash'])
+        .execute();
+
+      await db.schema
+        .createTable('sessions')
+        .addColumn('id', 'text', (column) => column.primaryKey())
+        .addColumn('token_hash', 'text', (column) => column.notNull().unique())
+        .addColumn('user_id', 'text', (column) =>
+          column.notNull().references('users.id').onDelete('cascade'),
+        )
+        .addColumn('status', 'text', (column) => column.notNull())
+        .addColumn('created_at', types.timestamp, (column) => column.notNull())
+        .addColumn('last_seen_at', types.timestamp, (column) => column.notNull())
+        .addColumn('expires_at', types.timestamp, (column) => column.notNull())
+        .addColumn('sudo_until', types.timestamp)
+        .addColumn('ip', 'text')
+        .addColumn('user_agent', 'text')
+        .execute();
+      await db.schema
+        .createIndex('sessions_user_id_idx')
+        .on('sessions')
+        .column('user_id')
+        .execute();
+
+      await db.schema
+        .createTable('audit_log')
+        .addColumn('id', 'text', (column) => column.primaryKey())
+        .addColumn('at', types.timestamp, (column) => column.notNull())
+        .addColumn('user_id', 'text')
+        .addColumn('action', 'text', (column) => column.notNull())
+        .addColumn('target', 'text')
+        .addColumn('details', types.json)
+        .addColumn('ip', 'text')
+        .execute();
+      await db.schema.createIndex('audit_log_at_idx').on('audit_log').column('at').execute();
+    },
+  },
 ];
