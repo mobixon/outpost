@@ -331,6 +331,20 @@ describe('servers', () => {
     ).toBe(404);
   });
 
+  it('share the general rate limit on plugin server routes', async () => {
+    const server = await start();
+    const { serverId, members } = await team(server);
+    const hit = () =>
+      get(server, `/api/v1/servers/${serverId}/plugins/test.game/read`, members.viewer.cookie);
+    const first = await hit();
+    expect(first.headers['x-ratelimit-limit']).toBe('600');
+    const remaining = Number(first.headers['x-ratelimit-remaining']);
+    for (let i = 0; i < remaining; i++) await hit();
+    const limited = await hit();
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json()).toMatchObject({ error: { code: 'rate_limited' } });
+  });
+
   it('are renamed and deleted by owners; the audit log keeps their history', async () => {
     const server = await start();
     const { admin, serverId, members } = await team(server);
