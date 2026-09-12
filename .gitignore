@@ -22,3 +22,7 @@ coverage/
 
 # Local development database
 .data/
+
+# Playwright output
+test-results/
+playwright-report/

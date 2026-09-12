@@ -32,7 +32,10 @@ describe.each(targets)('database ($name)', ({ url }) => {
     await runMigrations(db, dialect, CORE_SCOPE, coreMigrations, silent);
 
     const rows = await db.selectFrom('outpost_migrations').selectAll().execute();
-    expect(rows.map((row) => `${row.scope}/${row.name}`)).toEqual(['outpost.core/0001_plugin_kv']);
+    expect(rows.map((row) => `${row.scope}/${row.name}`).sort()).toEqual([
+      'outpost.core/0001_plugin_kv',
+      'outpost.core/0002_auth',
+    ]);
     expect(typeof rows[0]?.applied_at).toBe('number');
   });
 

@@ -4,6 +4,7 @@ import {
   type PluginContext,
   type PluginDefinition,
   type PluginLogger,
+  type RouteAccess,
   type RouteDefinition,
   type RouteSchema,
   type SqlDialect,
@@ -11,6 +12,7 @@ import {
 import type { PluginInfo } from '@outpost/shared';
 import type { FastifyBaseLogger } from 'fastify';
 import type { Kysely } from 'kysely';
+import type { AuditLog } from '../audit.js';
 import { CORE_SCOPE } from '../db/core-migrations.js';
 import { runMigrations } from '../db/migrator.js';
 import type { CoreTables } from '../db/schema.js';
@@ -31,8 +33,9 @@ export function resolvePlugins(
 ): PluginDefinition[] {
   const byId = new Map<string, PluginDefinition>();
   for (const plugin of available) {
-    if (plugin.id === CORE_SCOPE)
+    if (plugin.id === CORE_SCOPE) {
       throw new PluginLoadError(`Plugin id "${CORE_SCOPE}" is reserved`);
+    }
     if (byId.has(plugin.id)) throw new PluginLoadError(`Plugin "${plugin.id}" is registered twice`);
     byId.set(plugin.id, plugin);
   }
@@ -98,10 +101,11 @@ export interface PluginHostOptions {
   db: Kysely<CoreTables>;
   dialect: SqlDialect;
   events: EventBus;
+  audit: AuditLog;
   logger: FastifyBaseLogger;
   instanceVersion: string;
   /** Mounts a plugin route on the HTTP server. */
-  registerRoute(pluginId: string, route: RouteDefinition<RouteSchema>): void;
+  registerRoute(pluginId: string, route: RouteDefinition<RouteSchema, RouteAccess>): void;
 }
 
 /** Runs plugin migrations and `setup` in dependency order, and plugin cleanups on shutdown. */
@@ -125,7 +129,7 @@ export class PluginHost {
   }
 
   async start(): Promise<void> {
-    const { db, dialect, events, logger, instanceVersion, registerRoute } = this.#options;
+    const { db, dialect, events, audit, logger, instanceVersion, registerRoute } = this.#options;
     for (const plugin of this.#plugins) {
       const log = logger.child({ plugin: plugin.id });
       await runMigrations(db, dialect, plugin.id, plugin.migrations ?? [], log);
@@ -136,6 +140,9 @@ export class PluginHost {
         instance: { version: instanceVersion },
         logger: toPluginLogger(log),
         events,
+        audit: {
+          record: (entry) => audit.record({ ...entry, action: `${plugin.id}.${entry.action}` }),
+        },
         http: {
           route: (route) => {
             if (!inSetup) {

@@ -15,8 +15,11 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/helmet": "^13.1.1",
     "@fastify/static": "^10.1.3",
     "@fastify/swagger": "^9.5.1",
+    "@node-rs/argon2": "^2.2.1",
     "@outpost/plugin-about": "workspace:*",
     "@outpost/plugin-api": "workspace:*",
     "@outpost/shared": "workspace:*",

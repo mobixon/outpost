@@ -6,7 +6,7 @@ import { isValidPluginId } from '@outpost/shared';
 import type { Component } from 'vue';
 import type { RouteRecordRaw } from 'vue-router';
 
-export { ApiError, apiFetch } from './api.js';
+export { ApiError, apiFetch, apiSend, onUnauthenticated, type SendMethod } from './api.js';
 export { findMissingMessageKeys, type LocaleMessages } from './messages.js';
 import type { LocaleMessages } from './messages.js';
 

@@ -24,6 +24,7 @@ import { storeLocale, SUPPORTED_LOCALES, type AppLocale } from '../i18n.js';
 import { useShell } from '../shell.js';
 import { themeMode, type ThemeMode } from '../theme/mode.js';
 import NavList from './NavList.vue';
+import UserMenu from './UserMenu.vue';
 
 const shell = useShell();
 const { t, locale } = useI18n();
@@ -126,10 +127,11 @@ function setLocale(value: unknown): void {
             </SelectItem>
           </SelectContent>
         </Select>
+        <UserMenu v-if="shell.session?.user" :username="shell.session.user.username" />
       </header>
 
       <main class="bg-muted/40 flex-1 overflow-auto p-4 lg:p-8">
-        <Alert v-if="!shell.apiAvailable" variant="destructive" class="mb-6">
+        <Alert v-if="shell.session === null" variant="destructive" class="mb-6">
           <TriangleAlertIcon />
           <AlertDescription>{{ t('shell.apiUnavailable') }}</AlertDescription>
         </Alert>

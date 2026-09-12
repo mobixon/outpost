@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export * from './auth.js';
+
 /** Base path of the HTTP API. */
 export const API_PREFIX = '/api/v1';
 

@@ -19,11 +19,22 @@ export interface KeyValueStore {
   delete(key: string): Promise<void>;
 }
 
+export interface PluginAuditEntry {
+  /** Short action name, stored as `<plugin id>.<action>`, e.g. `outpost.players.ban`. */
+  action: string;
+  userId?: string;
+  target?: string;
+  details?: Record<string, unknown>;
+  ip?: string;
+}
+
 export interface PluginContext {
   readonly plugin: PluginInfo;
   readonly instance: { readonly version: string };
   readonly logger: PluginLogger;
   readonly events: EventBus;
+  /** The instance audit log. Record every change a user makes through the plugin. */
+  readonly audit: { record(entry: PluginAuditEntry): Promise<void> };
   /** Registers HTTP routes under `/api/v1/plugins/<plugin id>`. Only usable during `setup`. */
   readonly http: HttpRegistry;
   readonly kv: KeyValueStore;

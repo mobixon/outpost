@@ -1,4 +1,5 @@
 import { HouseIcon } from '@lucide/vue';
+import type { SessionState } from '@outpost/shared';
 import type { WebPluginDefinition } from '@outpost/web-plugin-api';
 import { inject, type Component, type InjectionKey } from 'vue';
 
@@ -13,8 +14,8 @@ export interface ShellNavItem {
 
 export interface ShellState {
   navItems: readonly ShellNavItem[];
-  /** False when the server could not be reached while loading the app. */
-  apiAvailable: boolean;
+  /** Session state loaded at startup; null when the server could not be reached. */
+  session: SessionState | null;
 }
 
 export const shellKey: InjectionKey<ShellState> = Symbol('outpost.shell');
