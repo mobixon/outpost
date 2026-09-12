@@ -19,3 +19,6 @@ coverage/
 .vscode/
 .DS_Store
 *.log
+
+# Local development database
+.data/

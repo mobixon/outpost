@@ -1,0 +1,48 @@
+import { HouseIcon } from '@lucide/vue';
+import type { WebPluginDefinition } from '@outpost/web-plugin-api';
+import { inject, type Component, type InjectionKey } from 'vue';
+
+export interface ShellNavItem {
+  /** `<plugin id>.<item key>`, or `core.*` for entries of the shell itself. */
+  id: string;
+  label: string;
+  icon: Component;
+  to: string;
+  order: number;
+}
+
+export interface ShellState {
+  navItems: readonly ShellNavItem[];
+  /** False when the server could not be reached while loading the app. */
+  apiAvailable: boolean;
+}
+
+export const shellKey: InjectionKey<ShellState> = Symbol('outpost.shell');
+
+const DEFAULT_ORDER = 500;
+
+/** Sidebar entries: the home entry plus the entries of enabled plugins, sorted by `order`. */
+export function buildNavItems(plugins: readonly WebPluginDefinition[]): ShellNavItem[] {
+  const items: ShellNavItem[] = [
+    { id: 'core.home', label: 'nav.home', icon: HouseIcon, to: '/', order: 0 },
+  ];
+  for (const plugin of plugins) {
+    for (const item of plugin.navItems ?? []) {
+      items.push({
+        id: `${plugin.id}.${item.key}`,
+        label: item.label,
+        icon: item.icon,
+        to: item.to,
+        order: item.order ?? DEFAULT_ORDER,
+      });
+    }
+  }
+  // Array.prototype.sort is stable, so entries with the same order keep the plugin order.
+  return items.sort((a, b) => a.order - b.order);
+}
+
+export function useShell(): ShellState {
+  const shell = inject(shellKey);
+  if (!shell) throw new Error('Shell state is not provided');
+  return shell;
+}

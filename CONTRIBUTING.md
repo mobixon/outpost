@@ -38,6 +38,21 @@ scripts/in-docker.sh pnpm check
 | `pnpm test`         | Run the unit tests (Vitest)                           |
 | `pnpm check`        | All of the above, in the same order as CI (no format) |
 
+## Running Outpost locally
+
+`pnpm dev` starts the API server (port 3000, restarts on changes) and the web UI (Vite, port 5173,
+hot reload, proxies `/api` to the server). Open <http://localhost:5173>.
+
+```sh
+pnpm dev
+
+# With Docker only: publish the Vite port
+OUTPOST_DOCKER_ARGS="-p 5173:5173" scripts/in-docker.sh pnpm dev
+```
+
+The development database is `apps/server/.data/outpost.db` (SQLite); delete it to start from
+scratch. All settings are described in [docs/configuration.md](docs/configuration.md).
+
 ## Repository layout
 
 - `apps/` — the server (Fastify) and the web UI (Vue)

@@ -31,6 +31,18 @@ Minecraft: Java Edition comes first.
 
 What comes after v0.1 is listed in the [roadmap](docs/PLAN.md#18-roadmap-after-v01).
 
+## Try it
+
+There are no published images yet. To build and run the current state:
+
+```sh
+docker build -t outpost .
+docker run --rm -p 3000:3000 -v outpost-data:/data outpost
+```
+
+Then open <http://localhost:3000>. Settings are listed in
+[docs/configuration.md](docs/configuration.md).
+
 ## Development
 
 You need Node.js 24 with Corepack (bundled with Node.js), or just Docker:

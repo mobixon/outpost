@@ -17,6 +17,20 @@ jobs:
     name: verify
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: outpost
+          POSTGRES_PASSWORD: outpost
+          POSTGRES_DB: outpost_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U outpost" --health-interval 5s --health-timeout 5s
+          --health-retries 10
+    env:
+      # Database tests also run against PostgreSQL when this is set.
+      OUTPOST_TEST_POSTGRES_URL: postgres://outpost:outpost@localhost:5432/outpost_test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -32,3 +46,26 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm build
       - run: pnpm test
+
+  image:
+    name: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the image
+        run: docker build --build-arg OUTPOST_VERSION=ci-${{ github.sha }} -t outpost:ci .
+      - name: Smoke test
+        run: |
+          docker run -d --name outpost -p 3000:3000 outpost:ci
+          for _ in $(seq 1 30); do curl -fsS http://localhost:3000/healthz && break; sleep 1; done
+          curl -fsS http://localhost:3000/readyz
+          curl -fsS http://localhost:3000/api/v1/plugins | grep -q '"outpost.about"'
+          curl -fsS http://localhost:3000/ | grep -q '<div id="app">'
+          curl -fsS http://localhost:3000/about | grep -q '<div id="app">'
+          test "$(docker inspect -f '{{.Config.User}}' outpost)" = node
+      - name: Container logs
+        if: always()
+        run: docker logs outpost
