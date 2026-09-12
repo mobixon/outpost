@@ -457,7 +457,8 @@ Core tables (SQLite or PostgreSQL through Kysely):
 - `user_backup_codes` (user_id, code_hash, used_at?)
 - `user_identities` (user_id, provider, subject, email?, created_at) — OIDC/GitHub links
 - `sessions` (id_hash, user_id, mfa_passed, ip, user_agent, created_at, last_seen_at, expires_at)
-- `invitations` (token_hash, created_by, server_id?, role_id, expires_at, used_by?, used_at?)
+- `invitations` (token_hash, created_by, is_superadmin, note?, expires_at, used_by?, used_at?);
+  Stage 3 adds server_id? and role_id? for invitations to a server
 - `roles` (id, key, name, builtin, permissions JSON)
 - `servers` (id, slug, name, game, runtime JSON, channel JSON with encrypted secret, files JSON,
   settings JSON, created_at)
@@ -491,8 +492,9 @@ Errors: `{ error: { code, message, details? } }` with proper status codes.
 
 - `GET /healthz`, `GET /readyz`
 - Setup/auth: `GET|POST /setup`, `POST /auth/login`, `POST /auth/2fa`, `POST /auth/logout`,
-  `GET /auth/oidc/:provider/start`, `GET /auth/oidc/:provider/callback`, `GET /me`,
-  `/me/password`, `/me/2fa/*`, `/me/sessions`, `/me/identities`
+  `POST /auth/providers/:provider/start` (returns the provider URL),
+  `GET /auth/providers/:provider/callback`, `GET /invite/:token`, `POST /invite/:token/accept`,
+  `GET /me`, `/me/password`, `/me/2fa/*`, `/me/sessions`, `/me/identities`
 - Admin: `/users`, `/invitations`, `/roles` (read-only in v0.1), `/audit`
 - Servers: `GET|POST /servers`, `GET|PATCH|DELETE /servers/:id`, `/servers/:id/members`,
   `GET /servers/:id/overview` (status, version, settings with locks), `POST /servers/:id/test`

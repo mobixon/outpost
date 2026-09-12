@@ -1,4 +1,9 @@
-import { API_PREFIX, sessionStateSchema, type SessionState } from '@outpost/shared';
+import {
+  API_PREFIX,
+  EXTERNAL_AUTH_RETURN_PATH,
+  sessionStateSchema,
+  type SessionState,
+} from '@outpost/shared';
 import { apiFetch } from '@outpost/web-plugin-api';
 
 /** The session state, or null when the server cannot be reached. */
@@ -18,6 +23,8 @@ export async function loadSession(): Promise<SessionState | null> {
 export function redirectFor(path: string, session: SessionState, next?: unknown): string | null {
   if (session.setupRequired) return path === '/setup' ? null : '/setup';
   if (path === '/setup') return '/';
+  // Invitation links and the page that external logins return to work in every session state.
+  if (path === EXTERNAL_AUTH_RETURN_PATH || path.startsWith('/invite/')) return null;
   if (session.status !== 'active') {
     if (path === '/login') return null;
     return path === '/' ? '/login' : `/login?next=${encodeURIComponent(path)}`;
@@ -25,6 +32,7 @@ export function redirectFor(path: string, session: SessionState, next?: unknown)
   if (session.twoFactorEnrollmentRequired) return path === '/account' ? null : '/account';
   // Signed in on the login page (the page reloads after a login): go on to the requested page.
   if (path === '/login') return safeNextPath(next);
+  if (path.startsWith('/admin/') && session.user?.isSuperadmin !== true) return '/';
   return null;
 }
 

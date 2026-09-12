@@ -3,6 +3,7 @@ import type { PluginDefinition } from '@outpost/plugin-api';
 import { CSRF_HEADER } from '@outpost/shared';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { buildApp } from './app.js';
+import type { GithubEndpoints } from './auth/providers.js';
 import { SESSION_COOKIE } from './auth/service.js';
 import { loadConfig } from './config.js';
 
@@ -20,9 +21,16 @@ export function testConfig(env: Record<string, string> = {}) {
 }
 
 export function startTestApp(
-  options: { env?: Record<string, string>; plugins?: readonly PluginDefinition[] } = {},
+  options: {
+    env?: Record<string, string>;
+    plugins?: readonly PluginDefinition[];
+    githubEndpoints?: GithubEndpoints;
+  } = {},
 ): Promise<FastifyInstance> {
-  return buildApp(testConfig(options.env), { plugins: options.plugins ?? [] });
+  return buildApp(testConfig(options.env), {
+    plugins: options.plugins ?? [],
+    ...(options.githubEndpoints && { githubEndpoints: options.githubEndpoints }),
+  });
 }
 
 /** The session cookie set by a response, as a `cookie` request header value. */

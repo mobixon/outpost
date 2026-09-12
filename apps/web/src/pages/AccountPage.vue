@@ -5,9 +5,9 @@ import { Alert, AlertDescription, Card, CardContent, CardHeader, CardTitle } fro
 import { apiFetch } from '@outpost/web-plugin-api';
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import IdentitiesCard from '../account/IdentitiesCard.vue';
 import PasswordCard from '../account/PasswordCard.vue';
 import SessionsCard from '../account/SessionsCard.vue';
-import SudoDialog from '../account/SudoDialog.vue';
 import TwoFactorCard from '../account/TwoFactorCard.vue';
 import { useShell } from '../shell.js';
 
@@ -55,10 +55,9 @@ const formatDate = (iso: string) =>
         </CardContent>
       </Card>
       <TwoFactorCard :user="user" @updated="refresh" @finished="onBackupCodesSaved" />
-      <PasswordCard />
+      <PasswordCard :has-password="user.hasPassword" @updated="refresh" />
+      <IdentitiesCard />
       <SessionsCard />
     </template>
-
-    <SudoDialog />
   </section>
 </template>

@@ -7,6 +7,7 @@ import type { Config } from '../config.js';
 import type { CoreTables } from '../db/schema.js';
 import { hashBackupCode, looksLikeBackupCode } from './backup-codes.js';
 import { SecretBox } from './crypto.js';
+import type { ExternalProvider } from './providers.js';
 import {
   MFA_PENDING_TTL_MS,
   SESSION_ABSOLUTE_TTL_MS,
@@ -47,6 +48,15 @@ export interface RequireUserOptions {
   sudo?: boolean;
 }
 
+export interface SignInDetails {
+  /** How the first login step was passed: `password`, `invitation` or `external`. */
+  method: string;
+  /** Id of the external provider. */
+  provider?: string;
+  /** A trusted provider did a multi-factor login, which replaces Outpost's own second factor. */
+  externalMfa?: boolean;
+}
+
 export function toAuthenticatedUser(user: UserRow): AuthenticatedUser {
   return { id: user.id, username: user.username, isSuperadmin: user.is_superadmin === 1 };
 }
@@ -67,6 +77,8 @@ export class AuthService {
     readonly db: Kysely<CoreTables>,
     readonly config: Config,
     readonly audit: AuditLog,
+    /** External login providers by id. */
+    readonly providers: ReadonlyMap<string, ExternalProvider> = new Map(),
   ) {
     this.sessions = new SessionStore(db);
     this.setup = new SetupGuard(config.setupToken);
@@ -74,11 +86,16 @@ export class AuthService {
     this.#secureCookies = config.publicUrl.startsWith('https:');
   }
 
-  enrollmentRequired(user: UserRow): boolean {
+  get secureCookies(): boolean {
+    return this.#secureCookies;
+  }
+
+  enrollmentRequired({ user, session }: AuthContext): boolean {
     return (
       this.config.requireTwoFactorForAdmins &&
       user.is_superadmin === 1 &&
-      user.totp_enabled_at === null
+      user.totp_enabled_at === null &&
+      session.external_mfa === 0
     );
   }
 
@@ -103,22 +120,40 @@ export class AuthService {
     if (ctx === null || ctx.session.status !== 'active') {
       throw new HttpError(401, 'unauthenticated', 'Sign in to continue');
     }
-    if (!options.allowEnrollment && this.enrollmentRequired(ctx.user)) {
+    if (!options.allowEnrollment && this.enrollmentRequired(ctx)) {
       throw new HttpError(
         403,
         'two_factor_enrollment_required',
         'Enable two-factor authentication to continue',
       );
     }
-    if (options.sudo && (ctx.session.sudo_until ?? 0) <= Date.now()) {
+    if (options.sudo) this.assertSudo(ctx);
+    return ctx;
+  }
+
+  /** Like requireUser, for instance administration. */
+  requireSuperadmin(request: FastifyRequest, options: { sudo?: boolean } = {}): AuthContext {
+    const ctx = this.requireUser(request);
+    if (ctx.user.is_superadmin !== 1) {
+      throw new HttpError(403, 'forbidden', 'Only administrators can do this');
+    }
+    if (options.sudo) this.assertSudo(ctx);
+    return ctx;
+  }
+
+  assertSudo(ctx: AuthContext): void {
+    if ((ctx.session.sudo_until ?? 0) <= Date.now()) {
       throw new HttpError(403, 'sudo_required', 'Confirm your password to continue');
     }
-    return ctx;
   }
 
   async sessionState(request: FastifyRequest): Promise<SessionState> {
     const ctx = request.auth;
-    const base = { setupRequired: this.setup.required, twoFactorEnrollmentRequired: false };
+    const base = {
+      setupRequired: this.setup.required,
+      twoFactorEnrollmentRequired: false,
+      providers: [...this.providers.values()].map(({ id, name }) => ({ id, name })),
+    };
     if (ctx === null) return { ...base, status: 'anonymous', user: null, sudoUntil: null };
     if (ctx.session.status === 'mfa')
       return { ...base, status: 'mfa', user: null, sudoUntil: null };
@@ -127,10 +162,44 @@ export class AuthService {
       ...base,
       status: 'active',
       user: await toCurrentUser(this.db, ctx.user),
-      twoFactorEnrollmentRequired: this.enrollmentRequired(ctx.user),
+      twoFactorEnrollmentRequired: this.enrollmentRequired(ctx),
       sudoUntil:
         sudoUntil !== null && sudoUntil > Date.now() ? new Date(sudoUntil).toISOString() : null,
     };
+  }
+
+  /**
+   * Starts a session for a user who passed the first login step. With two-factor authentication
+   * on, the session waits for the code, unless a trusted provider already did a multi-factor login.
+   */
+  async signIn(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    user: UserRow,
+    details: SignInDetails,
+  ): Promise<SessionStatus> {
+    // A new login always gets a new session, never the one the browser brought along.
+    if (request.auth !== null) await this.sessions.delete(request.auth.session.id);
+    const externalMfa = details.externalMfa ?? false;
+    const status: SessionStatus = user.totp_enabled_at !== null && !externalMfa ? 'mfa' : 'active';
+    const { token } = await this.sessions.create(user.id, status, this.client(request), {
+      sudo: status === 'active',
+      externalMfa,
+    });
+    this.setSessionCookie(reply, token, status);
+    if (status === 'active') {
+      await this.audit.record({
+        action: 'auth.login',
+        userId: user.id,
+        ip: request.ip,
+        details: {
+          method: details.method,
+          ...(details.provider !== undefined && { provider: details.provider }),
+          ...(externalMfa && { externalMfa }),
+        },
+      });
+    }
+    return status;
   }
 
   setSessionCookie(reply: FastifyReply, token: string, status: SessionStatus): void {

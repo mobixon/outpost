@@ -31,6 +31,32 @@ insecure development key and `http://localhost:5173` (the Vite dev server) as th
 | `OUTPOST_VERSION`                | `0.0.0-dev`                                                        | Version shown in the UI; set by the image build                                                                            |
 | `NODE_ENV`                       | `development` (image: `production`)                                | `development` enables human-readable logs; `production` requires the variables above                                       |
 
+## External login
+
+Login with GitHub and OpenID Connect providers is off until configured. See
+[authentication](authentication.md#external-login-github-and-openid-connect) for the setup steps.
+
+| Variable                           | Description                                                                                       |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `OUTPOST_GITHUB_CLIENT_ID`         | Client ID of a GitHub OAuth app; together with the secret it enables "Continue with GitHub"       |
+| `OUTPOST_GITHUB_CLIENT_SECRET`     | Client secret of the GitHub OAuth app                                                             |
+| `OUTPOST_GITHUB_SIGNUP_ORGS`       | GitHub organizations whose members may create an account by signing in (comma-separated)          |
+| `OUTPOST_GITHUB_SIGNUP_EMAILS`     | Verified email addresses that may create an account by signing in with GitHub                     |
+| `OUTPOST_GITHUB_SIGNUP_DOMAINS`    | Domains of verified email addresses that may create an account by signing in with GitHub          |
+| `OUTPOST_OIDC_<ID>_ISSUER`         | Issuer URL of an OpenID Connect provider, e.g. `https://id.example.com/realms/main` (required)    |
+| `OUTPOST_OIDC_<ID>_CLIENT_ID`      | Client ID at the provider (required)                                                              |
+| `OUTPOST_OIDC_<ID>_CLIENT_SECRET`  | Client secret; leave unset for a public client                                                    |
+| `OUTPOST_OIDC_<ID>_NAME`           | Name on the login button (default: the id, e.g. `Keycloak`)                                       |
+| `OUTPOST_OIDC_<ID>_SCOPES`         | Requested scopes (default `openid profile email`)                                                 |
+| `OUTPOST_OIDC_<ID>_TRUST_MFA`      | `true`: a multi-factor login at the provider replaces Outpost's two-factor code (default `false`) |
+| `OUTPOST_OIDC_<ID>_SIGNUP_EMAILS`  | Verified email addresses that may create an account by signing in with this provider              |
+| `OUTPOST_OIDC_<ID>_SIGNUP_DOMAINS` | Domains of verified email addresses that may create an account by signing in with this provider   |
+
+`<ID>` names the provider: `OUTPOST_OIDC_KEYCLOAK_ISSUER` configures the provider `keycloak`
+(underscores become dashes), whose callback URL is
+`<OUTPOST_PUBLIC_URL>/api/v1/auth/providers/keycloak/callback`. Any number of providers can be
+configured this way. Unknown `OUTPOST_OIDC_*` variables stop Outpost at startup, to catch typos.
+
 ## Database
 
 SQLite needs no setup: the database file is created on first start. With the Docker image, mount a

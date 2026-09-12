@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+export * from './admin.js';
 export * from './auth.js';
 
 /** Base path of the HTTP API. */

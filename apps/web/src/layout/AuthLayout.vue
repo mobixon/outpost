@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@outpost/ui';
+import FlashMessage from './FlashMessage.vue';
 
 defineProps<{ title: string; description?: string }>();
 </script>
@@ -11,6 +12,7 @@ defineProps<{ title: string; description?: string }>();
         <img src="/favicon.svg" alt="" class="size-8" />
         <span class="text-xl font-semibold">Outpost</span>
       </div>
+      <FlashMessage />
       <Card>
         <CardHeader>
           <CardTitle class="text-lg">{{ title }}</CardTitle>

@@ -27,6 +27,7 @@ import {
 } from 'fastify-type-provider-zod';
 import { sql } from 'kysely';
 import { AuditLog } from './audit.js';
+import { createProviders, type GithubEndpoints } from './auth/providers.js';
 import { AuthService, toAuthenticatedUser } from './auth/service.js';
 import type { Config } from './config.js';
 import { createDatabase } from './db/connection.js';
@@ -38,12 +39,17 @@ import { isClientRoute, registerWebUi } from './http/web-ui.js';
 import { PluginHost, resolvePlugins } from './plugins/host.js';
 import { builtInPlugins } from './plugins/registry.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerExternalAuthRoutes } from './routes/external-auth.js';
+import { registerInvitationRoutes } from './routes/invitations.js';
 import { registerMeRoutes } from './routes/me.js';
 import { registerSystemRoutes } from './routes/system.js';
+import { registerUserRoutes } from './routes/users.js';
 
 export interface BuildAppOptions {
   /** Plugins to choose from instead of the built-in ones (used by tests). */
   plugins?: readonly PluginDefinition[];
+  /** GitHub URLs instead of github.com (used by tests). */
+  githubEndpoints?: GithubEndpoints;
 }
 
 /** Creates the server with database, plugins and routes ready. Call `listen()` to serve. */
@@ -105,7 +111,8 @@ export async function buildApp(
       app.log.warn('OUTPOST_SECRET_KEY is not set: using an insecure development key');
     }
     const audit = new AuditLog(db, app.log);
-    const auth = new AuthService(db, config, audit);
+    const providers = createProviders(config.providers, options.githubEndpoints);
+    const auth = new AuthService(db, config, audit, providers);
     await auth.setup.init(db, app.log);
     app.decorateRequest('auth', null);
     app.addHook('onRequest', async (request) => {
@@ -140,7 +147,10 @@ export async function buildApp(
       },
     });
     registerAuthRoutes(app, auth);
+    registerExternalAuthRoutes(app, auth);
+    registerInvitationRoutes(app, auth);
     registerMeRoutes(app, auth);
+    registerUserRoutes(app, auth);
     await plugins.start();
 
     if (config.webDir) await registerWebUi(app, config.webDir);
@@ -201,7 +211,7 @@ function registerPluginRoute(
       let user: AuthenticatedUser | undefined;
       if (route.access === 'public') {
         const ctx = request.auth;
-        if (ctx !== null && ctx.session.status === 'active' && !auth.enrollmentRequired(ctx.user)) {
+        if (ctx !== null && ctx.session.status === 'active' && !auth.enrollmentRequired(ctx)) {
           user = toAuthenticatedUser(ctx.user);
         }
       } else {

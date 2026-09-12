@@ -20,9 +20,11 @@ import {
 import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterView, useRoute } from 'vue-router';
+import SudoDialog from '../account/SudoDialog.vue';
 import { storeLocale, SUPPORTED_LOCALES, type AppLocale } from '../i18n.js';
 import { useShell } from '../shell.js';
 import { themeMode, type ThemeMode } from '../theme/mode.js';
+import FlashMessage from './FlashMessage.vue';
 import NavList from './NavList.vue';
 import UserMenu from './UserMenu.vue';
 
@@ -135,8 +137,10 @@ function setLocale(value: unknown): void {
           <TriangleAlertIcon />
           <AlertDescription>{{ t('shell.apiUnavailable') }}</AlertDescription>
         </Alert>
+        <FlashMessage class="mx-auto mb-6 max-w-5xl" />
         <RouterView />
       </main>
     </div>
+    <SudoDialog v-if="shell.session?.user" />
   </div>
 </template>
