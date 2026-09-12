@@ -78,23 +78,7 @@ export function registerAuthRoutes(fastify: FastifyInstance, auth: AuthService):
         throw new HttpError(401, 'invalid_credentials', 'Wrong username or password');
       }
       auth.passwordFailures.reset(userKey);
-
-      // A new login always gets a new session, never the one the browser brought along.
-      if (request.auth !== null) await auth.sessions.delete(request.auth.session.id);
-      const status: 'mfa' | 'active' = user.totp_enabled_at !== null ? 'mfa' : 'active';
-      const { token } = await auth.sessions.create(user.id, status, auth.client(request), {
-        sudo: status === 'active',
-      });
-      auth.setSessionCookie(reply, token, status);
-      if (status === 'active') {
-        await auth.audit.record({
-          action: 'auth.login',
-          userId: user.id,
-          ip: request.ip,
-          details: { method: 'password' },
-        });
-      }
-      return { status };
+      return { status: await auth.signIn(request, reply, user, { method: 'password' }) };
     },
   );
 
@@ -150,21 +134,40 @@ export function registerAuthRoutes(fastify: FastifyInstance, auth: AuthService):
     return reply.code(204).send();
   });
 
-  // Sudo mode: confirming the password unlocks sensitive actions for a few minutes.
+  // Sudo mode: confirming the password unlocks sensitive actions for a few minutes. Accounts
+  // without a password confirm with a two-factor code or by signing in with their provider again.
   app.post(
     `${API_PREFIX}/auth/sudo`,
     { schema: { tags, body: sudoRequestSchema, response: { 200: sudoResultSchema } } },
     async (request, reply) => {
       const ctx = auth.requireUser(request, { allowEnrollment: true });
-      const key = `user:${ctx.user.username}`;
+      const { user } = ctx;
+      const key = `user:${user.username}`;
       auth.assertNotBlocked(reply, [auth.passwordFailures, key]);
-      if (!(await verifyPassword(ctx.user.password_hash, request.body.password))) {
+      const { password, code } = request.body;
+      if (password === undefined && user.password_hash !== null) {
+        throw new HttpError(400, 'password_required', 'Confirm with your password');
+      }
+      const method =
+        password !== undefined
+          ? (await verifyPassword(user.password_hash, password))
+            ? 'password'
+            : null
+          : await auth.verifySecondFactor(user, code ?? '');
+      if (method === null) {
         auth.passwordFailures.recordFailure(key);
-        throw new HttpError(403, 'invalid_password', 'Wrong password');
+        throw password !== undefined
+          ? new HttpError(403, 'invalid_password', 'Wrong password')
+          : new HttpError(400, 'invalid_code', 'The code is not valid');
       }
       auth.passwordFailures.reset(key);
       const until = await auth.sessions.startSudo(ctx.session);
-      await auth.audit.record({ action: 'auth.sudo', userId: ctx.user.id, ip: request.ip });
+      await auth.audit.record({
+        action: 'auth.sudo',
+        userId: user.id,
+        ip: request.ip,
+        details: { method },
+      });
       return { sudoUntil: new Date(until).toISOString() };
     },
   );

@@ -3,6 +3,7 @@ import {
   API_PREFIX,
   backupCodesSchema,
   currentUserSchema,
+  identityListSchema,
   passwordChangeRequestSchema,
   sessionListSchema,
   twoFactorSetupSchema,
@@ -12,12 +13,16 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { generateBackupCodes, hashBackupCode } from '../auth/backup-codes.js';
+import { listIdentities, unlinkIdentity } from '../auth/identities.js';
 import { hashPassword, passwordProblem, verifyPassword } from '../auth/password.js';
 import type { AuthService } from '../auth/service.js';
 import { generateTotpSecret, totpUri, verifyTotp } from '../auth/totp.js';
 import { deleteBackupCodes, replaceBackupCodes, toCurrentUser, updateUser } from '../auth/users.js';
 
-/** The signed-in user's own account: password, two-factor authentication and sessions. */
+/**
+ * The signed-in user's own account: password, two-factor authentication, sessions and linked
+ * login providers.
+ */
 export function registerMeRoutes(fastify: FastifyInstance, auth: AuthService): void {
   const app = fastify.withTypeProvider<ZodTypeProvider>();
   const tags = ['account'];
@@ -38,22 +43,80 @@ export function registerMeRoutes(fastify: FastifyInstance, auth: AuthService): v
     `${base}/password`,
     { schema: { tags, body: passwordChangeRequestSchema } },
     async (request, reply) => {
-      const { user, session } = auth.requireUser(request, { allowEnrollment: true });
-      const key = `user:${user.username}`;
-      auth.assertNotBlocked(reply, [auth.passwordFailures, key]);
+      const ctx = auth.requireUser(request, { allowEnrollment: true });
+      const { user, session } = ctx;
       const { currentPassword, newPassword } = request.body;
-      if (!(await verifyPassword(user.password_hash, currentPassword))) {
-        auth.passwordFailures.recordFailure(key);
-        throw new HttpError(403, 'invalid_password', 'The current password is wrong');
+      const firstPassword = user.password_hash === null;
+      if (firstPassword) {
+        // Accounts created through a provider confirm their identity with sudo mode instead.
+        auth.assertSudo(ctx);
+      } else {
+        const key = `user:${user.username}`;
+        auth.assertNotBlocked(reply, [auth.passwordFailures, key]);
+        if (!(await verifyPassword(user.password_hash, currentPassword ?? ''))) {
+          auth.passwordFailures.recordFailure(key);
+          throw new HttpError(403, 'invalid_password', 'The current password is wrong');
+        }
+        auth.passwordFailures.reset(key);
       }
-      auth.passwordFailures.reset(key);
       const problem = passwordProblem(newPassword, user.username);
       if (problem) throw new HttpError(400, problem, 'The password must not contain the username');
 
       await updateUser(auth.db, user.id, { password_hash: await hashPassword(newPassword) });
       // Whoever knew the old password is signed out everywhere else.
-      await auth.sessions.deleteForUser(user.id, session.id);
-      await auth.audit.record({ action: 'auth.password_changed', userId: user.id, ip: request.ip });
+      if (!firstPassword) await auth.sessions.deleteForUser(user.id, session.id);
+      await auth.audit.record({
+        action: firstPassword ? 'auth.password_set' : 'auth.password_changed',
+        userId: user.id,
+        ip: request.ip,
+      });
+      return reply.code(204).send();
+    },
+  );
+
+  app.get(
+    `${base}/identities`,
+    { schema: { tags, response: { 200: identityListSchema } } },
+    async (request) => {
+      const { user } = auth.requireUser(request, { allowEnrollment: true });
+      const identities = await listIdentities(auth.db, user.id);
+      return {
+        identities: identities.map((identity) => ({
+          provider: identity.provider,
+          // A provider that was removed from the configuration still shows up under its id.
+          providerName: auth.providers.get(identity.provider)?.name ?? identity.provider,
+          displayName: identity.display_name,
+          createdAt: new Date(identity.created_at).toISOString(),
+          lastUsedAt:
+            identity.last_used_at === null ? null : new Date(identity.last_used_at).toISOString(),
+        })),
+      };
+    },
+  );
+
+  app.delete(
+    `${base}/identities/:provider`,
+    { schema: { tags, params: z.object({ provider: z.string() }) } },
+    async (request, reply) => {
+      const { user } = auth.requireUser(request, { allowEnrollment: true, sudo: true });
+      const identities = await listIdentities(auth.db, user.id);
+      if (!identities.some((identity) => identity.provider === request.params.provider)) {
+        throw new HttpError(404, 'not_found', 'This provider is not linked');
+      }
+      if (user.password_hash === null && identities.length === 1) {
+        throw new HttpError(
+          409,
+          'last_login_method',
+          'Set a password or link another provider before unlinking this one',
+        );
+      }
+      await unlinkIdentity(auth.db, user.id, request.params.provider);
+      await auth.audit.record({
+        action: 'auth.identity_unlinked',
+        userId: user.id,
+        ip: request.ip,
+        details: { provider: request.params.provider },
+      });
       return reply.code(204).send();
     },
   );

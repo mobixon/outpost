@@ -20,6 +20,8 @@ describe.each(targets)('database ($name)', ({ url }) => {
     // Every core table, children before parents (foreign keys).
     const tables = [
       'test_items',
+      'invitations',
+      'user_identities',
       'user_backup_codes',
       'sessions',
       'users',
@@ -45,6 +47,7 @@ describe.each(targets)('database ($name)', ({ url }) => {
     expect(rows.map((row) => `${row.scope}/${row.name}`).sort()).toEqual([
       'outpost.core/0001_plugin_kv',
       'outpost.core/0002_auth',
+      'outpost.core/0003_external_auth',
     ]);
     expect(typeof rows[0]?.applied_at).toBe('number');
   });

@@ -80,4 +80,44 @@ export const coreMigrations: readonly Migration[] = [
       await db.schema.createIndex('audit_log_at_idx').on('audit_log').column('at').execute();
     },
   },
+  {
+    name: '0003_external_auth',
+    async up(db, { types }) {
+      await db.schema
+        .createTable('user_identities')
+        .addColumn('provider', 'text', (column) => column.notNull())
+        .addColumn('subject', 'text', (column) => column.notNull())
+        .addColumn('user_id', 'text', (column) =>
+          column.notNull().references('users.id').onDelete('cascade'),
+        )
+        .addColumn('display_name', 'text')
+        .addColumn('created_at', types.timestamp, (column) => column.notNull())
+        .addColumn('last_used_at', types.timestamp)
+        .addPrimaryKeyConstraint('user_identities_pk', ['provider', 'subject'])
+        .addUniqueConstraint('user_identities_user_provider_unique', ['user_id', 'provider'])
+        .execute();
+
+      await db.schema
+        .createTable('invitations')
+        .addColumn('id', 'text', (column) => column.primaryKey())
+        .addColumn('token_hash', 'text', (column) => column.notNull().unique())
+        .addColumn('is_superadmin', types.boolean, (column) => column.notNull().defaultTo(0))
+        .addColumn('note', 'text')
+        .addColumn('created_by', 'text', (column) =>
+          column.references('users.id').onDelete('set null'),
+        )
+        .addColumn('created_at', types.timestamp, (column) => column.notNull())
+        .addColumn('expires_at', types.timestamp, (column) => column.notNull())
+        .addColumn('used_by', 'text', (column) =>
+          column.references('users.id').onDelete('set null'),
+        )
+        .addColumn('used_at', types.timestamp)
+        .execute();
+
+      await db.schema
+        .alterTable('sessions')
+        .addColumn('external_mfa', types.boolean, (column) => column.notNull().defaultTo(0))
+        .execute();
+    },
+  },
 ];

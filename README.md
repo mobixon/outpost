@@ -24,8 +24,8 @@ Minecraft: Java Edition comes first.
 - **Players** — who is online, history, whitelist, ops, bans and kicks, with correct UUIDs for
   offline-mode servers.
 - **Scheduler** — cron-scheduled commands and rotating chat announcements.
-- **Users and roles** — several users, per-server roles, local accounts with TOTP 2FA, OIDC and
-  GitHub login.
+- **Users and roles** — several users, per-server roles, local accounts with TOTP 2FA, invitation
+  links, OIDC and GitHub login.
 - **Autodiscovery** of `itzg/minecraft-server` containers with a setup wizard.
 - English and Russian interface.
 

@@ -35,7 +35,7 @@ export class SessionStore {
     userId: string,
     status: SessionStatus,
     client: ClientInfo,
-    options: { sudo?: boolean } = {},
+    options: { sudo?: boolean; externalMfa?: boolean } = {},
   ): Promise<{ token: string; session: SessionRow }> {
     const now = Date.now();
     const token = randomToken();
@@ -50,6 +50,7 @@ export class SessionStore {
       sudo_until: options.sudo ? now + SUDO_TTL_MS : null,
       ip: client.ip,
       user_agent: client.userAgent?.slice(0, 300) ?? null,
+      external_mfa: options.externalMfa ? 1 : 0,
     };
     await this.db.insertInto('sessions').values(session).execute();
     return { token, session };

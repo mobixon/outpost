@@ -24,6 +24,7 @@ describe('loadConfig', () => {
       publicUrl: 'http://localhost:5173',
       requireTwoFactorForAdmins: true,
       setupToken: undefined,
+      providers: [],
     });
   });
 
@@ -66,6 +67,78 @@ describe('loadConfig', () => {
       port: 3000,
       webDir: undefined,
     });
+  });
+
+  it('configures GitHub login', () => {
+    const config = loadConfig({
+      OUTPOST_GITHUB_CLIENT_ID: 'id',
+      OUTPOST_GITHUB_CLIENT_SECRET: 'secret',
+      OUTPOST_GITHUB_SIGNUP_ORGS: 'Acme, other-org',
+      OUTPOST_GITHUB_SIGNUP_DOMAINS: '@Example.com',
+    });
+    expect(config.providers).toEqual([
+      {
+        kind: 'github',
+        id: 'github',
+        name: 'GitHub',
+        clientId: 'id',
+        clientSecret: 'secret',
+        signup: { emails: [], domains: ['example.com'], orgs: ['acme', 'other-org'] },
+      },
+    ]);
+    expect(() => loadConfig({ OUTPOST_GITHUB_CLIENT_ID: 'id' })).toThrow(/set both/);
+  });
+
+  it('configures OIDC providers from their variables', () => {
+    const config = loadConfig({
+      OUTPOST_OIDC_MY_IDP_ISSUER: 'https://id.example.com/realms/main',
+      OUTPOST_OIDC_MY_IDP_CLIENT_ID: 'outpost',
+      OUTPOST_OIDC_MY_IDP_CLIENT_SECRET: 'secret',
+      OUTPOST_OIDC_MY_IDP_TRUST_MFA: 'true',
+      OUTPOST_OIDC_MY_IDP_SIGNUP_EMAILS: 'ann@example.com bob@example.com',
+      OUTPOST_OIDC_AUTH_ISSUER: 'http://auth.internal',
+      OUTPOST_OIDC_AUTH_CLIENT_ID: 'public-client',
+      OUTPOST_OIDC_AUTH_NAME: 'Company login',
+    });
+    expect(config.providers).toEqual([
+      {
+        kind: 'oidc',
+        id: 'auth',
+        name: 'Company login',
+        issuer: 'http://auth.internal',
+        clientId: 'public-client',
+        clientSecret: undefined,
+        scopes: 'openid profile email',
+        trustMfa: false,
+        signup: { emails: [], domains: [], orgs: [] },
+      },
+      {
+        kind: 'oidc',
+        id: 'my-idp',
+        name: 'My Idp',
+        issuer: 'https://id.example.com/realms/main',
+        clientId: 'outpost',
+        clientSecret: 'secret',
+        scopes: 'openid profile email',
+        trustMfa: true,
+        signup: { emails: ['ann@example.com', 'bob@example.com'], domains: [], orgs: [] },
+      },
+    ]);
+  });
+
+  it('reports incomplete and unknown OIDC variables', () => {
+    const load = () =>
+      loadConfig({
+        OUTPOST_OIDC_A_CLIENT_ID: 'x',
+        OUTPOST_OIDC_B_ISSUER: 'https://b.example.com',
+        OUTPOST_OIDC_B_CLIENTID: 'typo',
+        OUTPOST_OIDC_GITHUB_ISSUER: 'https://github.com',
+      });
+    expect(load).toThrow(ConfigError);
+    expect(load).toThrow(/OUTPOST_OIDC_B_CLIENTID: unknown variable/);
+    expect(load).toThrow(/OUTPOST_OIDC_A_ISSUER: required/);
+    expect(load).toThrow(/OUTPOST_OIDC_B_CLIENT_ID: required/);
+    expect(load).toThrow(/"github" is reserved/);
   });
 
   it('reports every invalid variable at once', () => {

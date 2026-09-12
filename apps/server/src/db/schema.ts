@@ -5,6 +5,8 @@ export interface CoreTables {
   users: UsersTable;
   user_backup_codes: UserBackupCodesTable;
   sessions: SessionsTable;
+  user_identities: UserIdentitiesTable;
+  invitations: InvitationsTable;
   audit_log: AuditLogTable;
 }
 
@@ -65,6 +67,35 @@ export interface SessionsTable {
   sudo_until: number | null;
   ip: string | null;
   user_agent: string | null;
+  /** 1 when a trusted provider confirmed a multi-factor login, which counts as Outpost's own 2FA. */
+  external_mfa: number;
+}
+
+/** Accounts at external login providers (GitHub, OIDC) linked to Outpost users. */
+export interface UserIdentitiesTable {
+  /** `github` or the id of an OIDC provider. */
+  provider: string;
+  /** The user's stable id at the provider: the GitHub user id or the OIDC `sub` claim. */
+  subject: string;
+  user_id: string;
+  /** Username or email address at the provider, for display only. */
+  display_name: string | null;
+  created_at: number;
+  last_used_at: number | null;
+}
+
+export interface InvitationsTable {
+  id: string;
+  /** SHA-256 of the token in the invitation link; the token itself is never stored. */
+  token_hash: string;
+  /** The new account becomes a superadmin. */
+  is_superadmin: number;
+  note: string | null;
+  created_by: string | null;
+  created_at: number;
+  expires_at: number;
+  used_by: string | null;
+  used_at: number | null;
 }
 
 export interface AuditLogTable {

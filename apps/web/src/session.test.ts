@@ -8,6 +8,7 @@ const state = (overrides: Partial<SessionState>): SessionState => ({
   user: null,
   twoFactorEnrollmentRequired: false,
   sudoUntil: null,
+  providers: [],
   ...overrides,
 });
 
@@ -42,6 +43,31 @@ describe('redirectFor', () => {
     expect(redirectFor('/login', state({ twoFactorEnrollmentRequired: true }), '/about')).toBe(
       '/account',
     );
+  });
+});
+
+describe('redirectFor with invitations, external logins and administration', () => {
+  const user = (isSuperadmin: boolean) => ({
+    id: 'u1',
+    username: 'ann',
+    isSuperadmin,
+    hasPassword: true,
+    twoFactorEnabled: false,
+    backupCodesLeft: 0,
+    createdAt: '2026-01-01T00:00:00.000Z',
+  });
+
+  it('shows invitation links and the external login return page in every state', () => {
+    for (const status of ['anonymous', 'mfa', 'active'] as const) {
+      expect(redirectFor('/invite/abc', state({ status }))).toBeNull();
+      expect(redirectFor('/auth/return', state({ status }))).toBeNull();
+    }
+    expect(redirectFor('/invite/abc', state({ setupRequired: true }))).toBe('/setup');
+  });
+
+  it('keeps the administration pages for superadmins', () => {
+    expect(redirectFor('/admin/users', state({ user: user(false) }))).toBe('/');
+    expect(redirectFor('/admin/users', state({ user: user(true) }))).toBeNull();
   });
 });
 

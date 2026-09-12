@@ -30,8 +30,9 @@ export async function withSudo<T>(action: () => Promise<T>): Promise<T> {
   }
 }
 
-export async function confirmSudo(password: string): Promise<void> {
-  await apiSend('POST', `${API_PREFIX}/auth/sudo`, { password }, sudoResultSchema);
+/** Confirms with the password, or with a two-factor code for accounts without a password. */
+export async function confirmSudo(proof: { password: string } | { code: string }): Promise<void> {
+  await apiSend('POST', `${API_PREFIX}/auth/sudo`, proof, sudoResultSchema);
   sudoRequest.value?.resolve();
   sudoRequest.value = null;
 }

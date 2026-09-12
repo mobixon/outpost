@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
   Field,
@@ -18,6 +19,11 @@ import { apiSend } from '@outpost/web-plugin-api';
 import { reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useErrorMessage } from '../errors.js';
+import { SudoCancelled, withSudo } from './sudo.js';
+
+// Accounts created through a login provider have no password yet: they set a first one.
+const props = defineProps<{ hasPassword: boolean }>();
+const emit = defineEmits<{ updated: [] }>();
 
 const { t } = useI18n();
 const errorMessage = useErrorMessage();
@@ -36,14 +42,21 @@ async function submit(): Promise<void> {
   }
   busy.value = true;
   try {
-    await apiSend('POST', `${API_PREFIX}/me/password`, {
-      currentPassword: form.current,
-      newPassword: form.next,
-    });
+    if (props.hasPassword) {
+      await apiSend('POST', `${API_PREFIX}/me/password`, {
+        currentPassword: form.current,
+        newPassword: form.next,
+      });
+    } else {
+      await withSudo(() =>
+        apiSend('POST', `${API_PREFIX}/me/password`, { newPassword: form.next }),
+      );
+      emit('updated');
+    }
     Object.assign(form, { current: '', next: '', repeat: '' });
     changed.value = true;
   } catch (err) {
-    error.value = errorMessage(err);
+    if (!(err instanceof SudoCancelled)) error.value = errorMessage(err);
   } finally {
     busy.value = false;
   }
@@ -54,11 +67,12 @@ async function submit(): Promise<void> {
   <Card>
     <CardHeader>
       <CardTitle>{{ t('account.password.title') }}</CardTitle>
+      <CardDescription v-if="!hasPassword">{{ t('account.password.setText') }}</CardDescription>
     </CardHeader>
     <CardContent>
       <form class="flex max-w-sm flex-col gap-4" @submit.prevent="submit">
         <FieldGroup>
-          <Field>
+          <Field v-if="hasPassword">
             <FieldLabel for="password-current">{{ t('account.password.current') }}</FieldLabel>
             <Input
               id="password-current"
@@ -94,11 +108,13 @@ async function submit(): Promise<void> {
           <AlertDescription>{{ error }}</AlertDescription>
         </Alert>
         <Alert v-if="changed">
-          <AlertDescription>{{ t('account.password.changed') }}</AlertDescription>
+          <AlertDescription>{{
+            hasPassword ? t('account.password.changed') : t('account.password.setDone')
+          }}</AlertDescription>
         </Alert>
         <Button type="submit" class="self-start" :disabled="busy">
           <Spinner v-if="busy" />
-          {{ t('account.password.submit') }}
+          {{ hasPassword ? t('account.password.submit') : t('account.password.set') }}
         </Button>
       </form>
     </CardContent>

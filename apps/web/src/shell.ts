@@ -1,4 +1,4 @@
-import { HouseIcon } from '@lucide/vue';
+import { HouseIcon, MailPlusIcon, UsersIcon } from '@lucide/vue';
 import type { SessionState } from '@outpost/shared';
 import type { WebPluginDefinition } from '@outpost/web-plugin-api';
 import { inject, type Component, type InjectionKey } from 'vue';
@@ -22,11 +22,29 @@ export const shellKey: InjectionKey<ShellState> = Symbol('outpost.shell');
 
 const DEFAULT_ORDER = 500;
 
-/** Sidebar entries: the home entry plus the entries of enabled plugins, sorted by `order`. */
-export function buildNavItems(plugins: readonly WebPluginDefinition[]): ShellNavItem[] {
+/**
+ * Sidebar entries: the home entry, the administration pages for superadmins and the entries of
+ * enabled plugins, sorted by `order`.
+ */
+export function buildNavItems(
+  plugins: readonly WebPluginDefinition[],
+  session: SessionState | null = null,
+): ShellNavItem[] {
   const items: ShellNavItem[] = [
     { id: 'core.home', label: 'nav.home', icon: HouseIcon, to: '/', order: 0 },
   ];
+  if (session?.user?.isSuperadmin === true) {
+    items.push(
+      { id: 'core.users', label: 'nav.users', icon: UsersIcon, to: '/admin/users', order: 900 },
+      {
+        id: 'core.invitations',
+        label: 'nav.invitations',
+        icon: MailPlusIcon,
+        to: '/admin/invitations',
+        order: 910,
+      },
+    );
+  }
   for (const plugin of plugins) {
     for (const item of plugin.navItems ?? []) {
       items.push({

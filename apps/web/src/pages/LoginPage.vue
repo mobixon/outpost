@@ -17,13 +17,19 @@ import {
 import { ApiError, apiSend } from '@outpost/web-plugin-api';
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRoute } from 'vue-router';
 import { useErrorMessage } from '../errors.js';
+import { startExternalAuth } from '../external-auth.js';
 import AuthLayout from '../layout/AuthLayout.vue';
+import ProviderButtons from '../layout/ProviderButtons.vue';
+import { safeNextPath } from '../session.js';
 import { useShell } from '../shell.js';
 
 const { t } = useI18n();
 const errorMessage = useErrorMessage();
 const shell = useShell();
+const route = useRoute();
+const providers = shell.session?.providers ?? [];
 
 // After a reload during the second step, the pending login continues with the code.
 const step = ref<'password' | 'code'>(shell.session?.status === 'mfa' ? 'code' : 'password');
@@ -74,6 +80,9 @@ const submitCode = () =>
     finish();
   });
 
+const signInWith = (provider: string) =>
+  run(() => startExternalAuth(provider, { intent: 'login' }, safeNextPath(route.query['next'])));
+
 const startOver = () =>
   run(async () => {
     await apiSend('POST', `${API_PREFIX}/auth/logout`);
@@ -123,6 +132,7 @@ function toggleBackupCode(): void {
         <Spinner v-if="busy" />
         {{ t('auth.signIn') }}
       </Button>
+      <ProviderButtons :providers="providers" :disabled="busy" @select="signInWith" />
     </form>
 
     <form v-else class="flex flex-col gap-6" @submit.prevent="submitCode">

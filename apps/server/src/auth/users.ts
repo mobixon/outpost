@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CurrentUser } from '@outpost/shared';
+import { USERNAME_PATTERN, type CurrentUser } from '@outpost/shared';
 import type { Kysely, Selectable, Updateable } from 'kysely';
 import type { CoreTables, UsersTable } from '../db/schema.js';
 
@@ -42,6 +42,40 @@ export async function createUser(
   };
   await db.insertInto('users').values(user).execute();
   return user;
+}
+
+/** Turns a provider username or email address into a valid username, or null. */
+export function toUsername(raw: string): string | null {
+  const name = raw
+    .toLowerCase()
+    .replace(/@.*$/, '')
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .slice(0, 32)
+    .replace(/^[._-]+|[._-]+$/g, '');
+  return USERNAME_PATTERN.test(name) ? name : null;
+}
+
+/**
+ * A free username for an account created through a provider: the first free suggestion, else the
+ * first one with a number appended.
+ */
+export async function availableUsername(
+  db: Kysely<CoreTables>,
+  suggestions: readonly (string | null)[],
+): Promise<string> {
+  const names = suggestions.flatMap((suggestion) => {
+    const name = suggestion === null ? null : toUsername(suggestion);
+    return name === null ? [] : [name];
+  });
+  const base = names[0] ?? 'user';
+  for (const name of names) {
+    if ((await findUserByUsername(db, name)) === undefined) return name;
+  }
+  for (let number = 2; number < 100; number++) {
+    const name = `${base.slice(0, 28)}-${number}`;
+    if ((await findUserByUsername(db, name)) === undefined) return name;
+  }
+  return `user-${randomUUID().slice(0, 8)}`;
 }
 
 export async function updateUser(
@@ -119,6 +153,7 @@ export async function toCurrentUser(db: Kysely<CoreTables>, user: UserRow): Prom
     id: user.id,
     username: user.username,
     isSuperadmin: user.is_superadmin === 1,
+    hasPassword: user.password_hash !== null,
     twoFactorEnabled: user.totp_enabled_at !== null,
     backupCodesLeft: Number(row.count),
     createdAt: new Date(user.created_at).toISOString(),

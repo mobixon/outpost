@@ -24,7 +24,7 @@ async function bootstrap(): Promise<void> {
   createApp(App)
     .use(createAppI18n(plugins))
     .use(createAppRouter(plugins, session))
-    .provide(shellKey, { navItems: buildNavItems(plugins), session })
+    .provide(shellKey, { navItems: buildNavItems(plugins, signedIn ? session : null), session })
     .mount('#app');
 }
 
