@@ -1,0 +1,6 @@
+pnpm-lock.yaml
+dist/
+coverage/
+.pnpm-store/
+local/
+CHANGELOG.md
