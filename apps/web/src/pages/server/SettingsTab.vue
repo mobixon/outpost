@@ -31,8 +31,11 @@ import { useRouter } from 'vue-router';
 import { SudoCancelled, withSudo } from '../../account/sudo.js';
 import { useErrorMessage } from '../../errors.js';
 import { loadServers } from '../../servers.js';
+import { useShell } from '../../shell.js';
+import ConnectionCard from './ConnectionCard.vue';
 
 const { t } = useI18n();
+const isSuperadmin = useShell().session?.user?.isSuperadmin === true;
 const errorMessage = useErrorMessage();
 const router = useRouter();
 const { server, reload } = useServerContext();
@@ -82,6 +85,7 @@ const remove = () =>
 
 <template>
   <div class="flex flex-col gap-6">
+    <ConnectionCard v-if="isSuperadmin" />
     <Card>
       <CardHeader>
         <CardTitle>{{ t('servers.settings.title') }}</CardTitle>

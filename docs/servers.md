@@ -6,13 +6,39 @@ members of, and on each server they can do what their role allows.
 ## Servers
 
 Superadmins add servers on the home page with a name and a short name, which appears in the
-addresses of the web UI (`/servers/<short name>`). Connecting a server to Docker, RCON and its
-files arrives with the connection wizard in an upcoming version; until then a server is shown as
-"not connected", but its team can already be set up.
+addresses of the web UI (`/servers/<short name>`), and connect them under **Settings →
+Connection**.
 
 Owners rename a server and delete it under **Settings**. Deleting removes the server from Outpost
 with its members and invitations; the game server itself is not touched, and the audit log keeps
 its entries.
+
+## Connecting a server
+
+This version connects over **RCON**, the remote console of Minecraft. The **Full** connection — the
+live server log, status and file access through Docker — is shown in the settings and arrives in a
+later version.
+
+1. RCON must be on (`enable-rcon=true` in `server.properties`; the `itzg/minecraft-server` image
+   turns it on by default) and reachable from Outpost. Put both containers into one Docker network
+   and use the container or service name as the host (CapRover: `srv-captain--<app>`). Never publish
+   the RCON port to the internet: RCON is not encrypted.
+2. The password is `rcon.password` in `server.properties`; with `itzg/minecraft-server` it is
+   `RCON_PASSWORD`, or the generated `password=` line in `.rcon-cli.env` in the data directory.
+3. **Test** connects, logs in and runs `list`, and shows which step fails. **Save** stores the
+   connection; the password is encrypted with `OUTPOST_SECRET_KEY` and never shown again.
+
+Only superadmins change connections, because a connection points Outpost at a host and port in its
+network. Once connected, **Overview** shows whether the server answers and who is online, and the
+**Console** tab runs commands (owners and admins) and sends chat messages (also moderators). Every
+command and message is written to the audit log.
+
+Limitations of the RCON connection:
+
+- the console shows the replies to commands, not the live server log;
+- on offline-mode servers, `whitelist add` for a player who has never joined stores the wrong
+  (online) UUID, because Minecraft looks up unknown names at Mojang. Let such players join once with
+  the whitelist off, or wait for the file access of the full connection.
 
 ## Roles
 
@@ -22,14 +48,15 @@ its entries.
 | Rename and delete the server (`server.manage`)      |   ✓   |       |           |        |
 | Manage members and invite people (`members.manage`) |   ✓   |  ✓¹   |           |        |
 | Read the server's audit log (`audit.view`)          |   ✓   |   ✓   |           |        |
+| Run any console command (`console.execute`)         |   ✓   |   ✓   |           |        |
+| Send chat messages (`chat.send`)                    |   ✓   |   ✓   |     ✓     |        |
 
 ¹ Admins manage only moderators and viewers: they can add, change, remove and invite people with
 these roles, but cannot touch owners and other admins. Owners manage every role, including other
 owners.
 
-Modules add their own permissions with the roles that have them — for example, the console and
-players modules will let moderators kick players and send chat messages, and owners and admins run
-any console command.
+The console permissions come from the console module: modules add their own permissions with the
+roles that have them — for example, the players module will let moderators kick players.
 
 **Superadmins** are the administrators of the whole Outpost instance. They have every permission
 on every server without being members, manage user accounts and see the audit log of the
@@ -83,7 +110,7 @@ export default definePlugin({
 ```
 
 Outpost answers `404` when the user cannot see the server, `403` without the permission and `409`
-when the server lacks the capability, before the handler runs. `ctx.permissions.has()` checks a
-permission elsewhere (for example for live updates), and `ctx.secrets` encrypts secrets the plugin
+when the server lacks the capability, before the handler runs. `ctx.commands.send(serverId, command)` runs a console command
+over the server's connection, `ctx.permissions.has()` checks a permission elsewhere (for example for live updates), and `ctx.secrets` encrypts secrets the plugin
 stores. The web part of a plugin adds a tab to the server page with `serverTabs`, shown to users
 with the tab's permission.

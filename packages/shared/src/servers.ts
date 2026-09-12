@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CONNECTION_TYPES, gameIdSchema } from './connection.js';
 
 /** Built-in server roles, from the most to the least powerful. */
 export const ROLE_KEYS = ['owner', 'admin', 'moderator', 'viewer'] as const;
@@ -31,10 +32,12 @@ export const serverSummarySchema = z.object({
   role: roleKeySchema.nullable(),
   /** What the signed-in user may do on this server. */
   permissions: z.array(z.string()),
-  /** What the server supports with its connection and game module (`logs.stream`, …). */
+  /** What the server supports with its connection and game module (`commands.send`, …). */
   capabilities: z.array(z.string()),
-  /** A runtime and command channel are configured (arrives with the connection wizard). */
+  /** A connection is configured. */
   connected: z.boolean(),
+  connectionType: z.enum(CONNECTION_TYPES).nullable(),
+  game: gameIdSchema.nullable(),
   createdAt: z.string(),
 });
 export type ServerSummary = z.infer<typeof serverSummarySchema>;

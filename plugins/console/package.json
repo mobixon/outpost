@@ -1,0 +1,33 @@
+{
+  "name": "@outpost/plugin-console",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Outpost module: console commands and chat messages over the server connection",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./server": "./src/server/index.ts",
+    "./web": "./src/web/index.ts"
+  },
+  "scripts": {
+    "typecheck": "vue-tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.45.0",
+    "@outpost/plugin-api": "workspace:*",
+    "@outpost/shared": "workspace:*",
+    "@outpost/ui": "workspace:*",
+    "@outpost/web-plugin-api": "workspace:*",
+    "zod": "^4.6.2"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0",
+    "vue-i18n": "^11.0.0",
+    "vue-router": "^5.0.0"
+  },
+  "devDependencies": {
+    "vue": "^3.5.42",
+    "vue-i18n": "^11.4.10",
+    "vue-router": "^5.3.1"
+  }
+}

@@ -1,9 +1,10 @@
 import about from '@outpost/plugin-about/web';
+import consolePlugin from '@outpost/plugin-console/web';
 import { API_PREFIX, pluginListSchema } from '@outpost/shared';
 import { apiFetch, type WebPluginDefinition } from '@outpost/web-plugin-api';
 
 /** Web parts of all built-in plugins; the server decides which of them are enabled. */
-export const builtInWebPlugins: readonly WebPluginDefinition[] = [about];
+export const builtInWebPlugins: readonly WebPluginDefinition[] = [about, consolePlugin];
 
 /** Web parts of the plugins the server reports as enabled (needs a signed-in user). */
 export async function loadEnabledPlugins(): Promise<WebPluginDefinition[]> {

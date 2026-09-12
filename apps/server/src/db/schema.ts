@@ -121,6 +121,10 @@ export interface ServersTable {
   /** Short name used in URLs of the web UI. */
   slug: string;
   name: string;
+  /** Game module id, e.g. `minecraft-java`; null until the server is connected. */
+  game: string | null;
+  /** JSON: how Outpost reaches the server, with the RCON password sealed. */
+  connection: string | null;
   created_at: number;
   updated_at: number;
 }

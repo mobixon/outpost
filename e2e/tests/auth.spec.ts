@@ -142,3 +142,29 @@ test('add a server and invite a moderator to it', async ({ page, browser }) => {
   await page.reload();
   await expect(page.getByTestId('member-survival-mod')).toContainText('Moderator');
 });
+
+test('connect the server over RCON and see why it does not answer', async ({ page }) => {
+  await signInWithBackupCode(page, backupCodes[2] ?? '');
+  await page.goto('/servers/survival/settings');
+
+  const card = page.getByTestId('connection-card');
+  await expect(card.getByText('Coming later')).toBeVisible();
+  await card.getByLabel('Host').fill('no-such-host.invalid');
+  await card.getByLabel('RCON password').fill('a password');
+  await card.getByRole('button', { name: 'Test' }).click();
+  await expect(card.getByTestId('connection-test')).toContainText(
+    'The host name cannot be resolved.',
+  );
+  await card.getByRole('button', { name: 'Save' }).click();
+  await expect(card.getByText('The connection was saved.')).toBeVisible();
+
+  await page.getByRole('link', { name: 'Overview' }).click();
+  await expect(page.getByTestId('server-reachable')).toContainText('The server does not answer');
+
+  await page.getByRole('link', { name: 'Console' }).click();
+  await page.getByLabel('Command').fill('list');
+  await page.getByRole('button', { name: 'Run' }).click();
+  await expect(page.getByTestId('console-output')).toContainText(
+    'The host name cannot be resolved.',
+  );
+});

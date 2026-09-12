@@ -23,6 +23,7 @@
     "@node-rs/argon2": "^2.2.1",
     "@outpost/plugin-about": "workspace:*",
     "@outpost/plugin-api": "workspace:*",
+    "@outpost/plugin-console": "workspace:*",
     "@outpost/shared": "workspace:*",
     "better-sqlite3": "^13.0.3",
     "fastify": "^5.12.4",
