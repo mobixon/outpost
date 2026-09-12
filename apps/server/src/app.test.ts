@@ -193,6 +193,17 @@ describe('plugin routes', () => {
     expect(response.statusCode).toBe(403);
     expect(response.json()).toMatchObject({ error: { code: 'csrf_header_missing' } });
   });
+
+  it('share the general rate limit', async () => {
+    const server = await start([echo]);
+    const hit = () => get(server, '/api/v1/plugins/test.echo/whoami');
+    const first = await hit();
+    expect(first.headers['x-ratelimit-limit']).toBe('600');
+    for (let i = 1; i < 600; i++) await hit();
+    const limited = await hit();
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json()).toMatchObject({ error: { code: 'rate_limited' } });
+  });
 });
 
 describe('plugin lifecycle', () => {
