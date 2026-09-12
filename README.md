@@ -1,0 +1,57 @@
+# Outpost
+
+Self-hosted, modular admin panel for game servers — it attaches to the servers you already run.
+Minecraft: Java Edition comes first.
+
+[![CI](https://github.com/mobixon/outpost/actions/workflows/ci.yml/badge.svg)](https://github.com/mobixon/outpost/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+> **Status: early development.** Nothing is usable yet. The [project plan](docs/PLAN.md) describes
+> what is being built and in which order.
+
+## Why Outpost
+
+- **Attaches instead of taking over.** Works with servers you already run in Docker, Docker Compose
+  or Docker Swarm (e.g. CapRover) — no migration into a hosting panel.
+- **Modular.** Games and features are modules built on one public plugin API.
+- **Secure by default.** Read-only Docker access through a socket proxy, 2FA, per-server roles and
+  an audit log.
+- **Lightweight.** One container and SQLite by default; PostgreSQL is optional.
+
+## Planned for v0.1
+
+- **Live console** — real-time server output and commands over RCON.
+- **Players** — who is online, history, whitelist, ops, bans and kicks, with correct UUIDs for
+  offline-mode servers.
+- **Scheduler** — cron-scheduled commands and rotating chat announcements.
+- **Users and roles** — several users, per-server roles, local accounts with TOTP 2FA, OIDC and
+  GitHub login.
+- **Autodiscovery** of `itzg/minecraft-server` containers with a setup wizard.
+- English and Russian interface.
+
+What comes after v0.1 is listed in the [roadmap](docs/PLAN.md#18-roadmap-after-v01).
+
+## Development
+
+You need Node.js 24 with Corepack (bundled with Node.js), or just Docker:
+
+```sh
+# With Node.js
+corepack enable
+pnpm install
+pnpm check
+
+# With Docker only
+scripts/in-docker.sh pnpm install
+scripts/in-docker.sh pnpm check
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and conventions.
+
+## Security
+
+Please report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE)
