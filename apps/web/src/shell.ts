@@ -11,7 +11,8 @@ export interface ShellServerTab {
   label: string;
   icon: Component;
   permission: string;
-  capability?: string;
+  /** The server needs this capability, or one of these. */
+  capability?: string | readonly string[];
   /** The games the plugin supports; null for any game. */
   games: readonly string[] | null;
   order: number;

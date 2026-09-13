@@ -108,7 +108,7 @@ describe.skipIf(server === undefined)('the Files connector over SFTP', { timeout
     expect(state.body).not.toContain(secret);
     expect((await get(outpost, `/api/v1/servers/${serverId}`, owner.cookie)).json()).toMatchObject({
       connectors: ['files'],
-      capabilities: ['files.read', 'files.write'],
+      capabilities: ['files.read', 'files.write', 'logs.stream'],
     });
 
     expect((await probe('GET', '/properties')).json()).toEqual({
@@ -123,7 +123,7 @@ describe.skipIf(server === undefined)('the Files connector over SFTP', { timeout
     // The stored password and the pinned key stay while host, port and username do.
     expect((await save({ ...input, secret: undefined, writable: false })).statusCode).toBe(204);
     expect((await get(outpost, `/api/v1/servers/${serverId}`, owner.cookie)).json()).toMatchObject({
-      capabilities: ['files.read'],
+      capabilities: ['files.read', 'logs.stream'],
     });
     expect((await probe('POST', '/write')).statusCode).toBe(409);
 

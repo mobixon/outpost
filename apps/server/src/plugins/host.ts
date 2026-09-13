@@ -7,6 +7,7 @@ import {
   type RouteAccess,
   type RouteDefinition,
   type RouteSchema,
+  type ServerEventStreamDefinition,
   type ServerRouteDefinition,
   type ServerRouteSchema,
   type SqlDialect,
@@ -115,6 +116,7 @@ export interface PluginHostOptions {
   servers: Omit<PluginContext['servers'], 'supports'>;
   commands: PluginContext['commands'];
   files: PluginContext['files'];
+  logs: PluginContext['logs'];
   hasPermission: PluginContext['permissions']['has'];
   /** Mounts a plugin route on the HTTP server. */
   registerRoute(pluginId: string, route: RouteDefinition<RouteSchema, RouteAccess>): void;
@@ -122,6 +124,12 @@ export interface PluginHostOptions {
   registerServerRoute(
     pluginId: string,
     route: ServerRouteDefinition<ServerRouteSchema>,
+    games: readonly string[] | null,
+  ): void;
+  /** Mounts an event stream of a game server, with the same checks as a server route. */
+  registerServerEvents(
+    pluginId: string,
+    stream: ServerEventStreamDefinition,
     games: readonly string[] | null,
   ): void;
 }
@@ -197,6 +205,15 @@ export class PluginHost {
               plugin.games ?? null,
             );
           },
+          serverEvents: (stream) => {
+            assertSetup('GET', stream.url);
+            if (!permissions.has(stream.permission)) {
+              throw new Error(
+                `Plugin "${plugin.id}" stream ${stream.url} requires the unknown permission "${stream.permission}"`,
+              );
+            }
+            this.#options.registerServerEvents(plugin.id, stream, plugin.games ?? null);
+          },
         },
         kv: createKeyValueStore(db, plugin.id),
         servers: {
@@ -205,6 +222,7 @@ export class PluginHost {
         },
         commands: this.#options.commands,
         files: this.#options.files,
+        logs: this.#options.logs,
         permissions: { has: this.#options.hasPermission },
         secrets: {
           seal: (plaintext) => secrets.seal(plaintext),

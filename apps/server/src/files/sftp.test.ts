@@ -129,6 +129,17 @@ describe.skipIf(server === undefined)('SFTP against a real server', { timeout: 3
     await sftpCall((done) => session.sftp.unlink(`${folder}/escape`, done));
   });
 
+  it('reads a part of a file, and less at its end', async () => {
+    const files = new SftpFiles(session.sftp, folder);
+    await files.write('world/log.txt', 'hello world');
+    const read = (offset: number, length: number) =>
+      files.readRange('world/log.txt', offset, length).then((bytes) => bytes.toString());
+    expect(await read(6, 5)).toBe('world');
+    expect(await read(6, 100)).toBe('world');
+    expect(await read(20, 5)).toBe('');
+    await files.remove('world/log.txt');
+  });
+
   it('shares one session per server until the settings change', async () => {
     const sessions = new SftpSessions();
     try {

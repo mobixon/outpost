@@ -129,7 +129,10 @@ describe('the Files connector', () => {
     expect((await save({ source: 'folder', path: 'survival', writable: false })).statusCode).toBe(
       204,
     );
-    expect(await summary()).toMatchObject({ connectors: ['files'], capabilities: ['files.read'] });
+    expect(await summary()).toMatchObject({
+      connectors: ['files'],
+      capabilities: ['files.read', 'logs.stream'],
+    });
     expect((await get(server, url, admin)).json()).toEqual({
       root,
       files: { source: 'folder', path: 'survival', writable: false },
@@ -145,7 +148,7 @@ describe('the Files connector', () => {
     );
     expect(await summary()).toMatchObject({
       connectors: ['files'],
-      capabilities: ['files.read', 'files.write'],
+      capabilities: ['files.read', 'files.write', 'logs.stream'],
     });
     expect((await probe('POST', '/write')).json()).toEqual({ written: true });
     expect(await readFile(path.join(root, 'survival', 'hello.txt'), 'utf8')).toBe('hi');

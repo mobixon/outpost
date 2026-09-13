@@ -14,10 +14,16 @@ export interface GameDefaults {
   rconPort: number;
   /** A file in the data folder of every server of the game, which the Files test looks for. */
   dataFile: string;
+  /** The log the server writes, relative to its data folder; followed for `logs.stream`. */
+  logFile: string;
 }
 
 const GAME_DEFAULTS: Record<GameId, GameDefaults> = {
-  'minecraft-java': { rconPort: 25575, dataFile: 'server.properties' },
+  'minecraft-java': {
+    rconPort: 25575,
+    dataFile: 'server.properties',
+    logFile: 'logs/latest.log',
+  },
 };
 
 /** The defaults of a game; undefined for a game Outpost does not know. */
@@ -40,6 +46,8 @@ export const Capability = {
   filesRead: 'files.read',
   /** Write the files of the server. */
   filesWrite: 'files.write',
+  /** Follow the log of the server (Files, for games that write a log file). */
+  logsStream: 'logs.stream',
 } as const;
 
 export const RCON_DEFAULT_PORT = 25575;

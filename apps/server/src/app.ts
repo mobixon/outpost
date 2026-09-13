@@ -9,11 +9,12 @@ import {
   type RouteDefinition,
   type RouteRequest,
   type RouteSchema,
+  type ServerEventStreamDefinition,
   type ServerRouteDefinition,
   type ServerRouteRequest,
   type ServerRouteSchema,
 } from '@outpost/plugin-api';
-import { API_PREFIX, pluginApiPath, type ApiErrorBody } from '@outpost/shared';
+import { API_PREFIX, gameDefaults, pluginApiPath, type ApiErrorBody } from '@outpost/shared';
 import Fastify, {
   type FastifyError,
   type FastifyInstance,
@@ -40,8 +41,9 @@ import { createDatabase } from './db/connection.js';
 import { CORE_SCOPE, coreMigrations } from './db/core-migrations.js';
 import { runMigrations } from './db/migrator.js';
 import { createEventBus } from './events.js';
-import { createFileAccess } from './files/access.js';
+import { FileAccess } from './files/access.js';
 import { SftpSessions } from './files/sftp.js';
+import { LogHub } from './logs/hub.js';
 import { registerSecurity } from './http/security.js';
 import { isClientRoute, registerWebUi } from './http/web-ui.js';
 import { PluginHost, resolvePlugins } from './plugins/host.js';
@@ -97,10 +99,12 @@ export async function buildApp(
   let host: PluginHost | undefined;
   let pruneTimer: NodeJS.Timeout | undefined;
   let connections: ConnectionManager | undefined;
+  let logs: LogHub | undefined;
   const sftpSessions = new SftpSessions();
   app.addHook('onClose', async () => {
     clearInterval(pruneTimer);
     connections?.closeAll();
+    logs?.closeAll();
     sftpSessions.closeAll();
     await host?.stop();
     await db.destroy();
@@ -146,6 +150,34 @@ export async function buildApp(
     const servers = new ServerService(db, registry, auth, config.secretKey);
     const connectionManager = new ConnectionManager((serverId) => servers.rconSettings(serverId));
     connections = connectionManager;
+    const fileAccess = new FileAccess(
+      config.filesRoot,
+      (serverId) => servers.filesSettings(serverId),
+      sftpSessions,
+    );
+    const logHub = new LogHub({
+      sourceOf: async (serverId) => {
+        const server = await servers.find(serverId);
+        const logFile =
+          server === undefined ? undefined : gameDefaults(servers.gameOf(server))?.logFile;
+        const settings = await servers.filesSettings(serverId);
+        if (logFile === undefined || settings === undefined) return undefined;
+        return {
+          // Every look over SFTP is a round trip to the host, so it looks less often.
+          pollMs: settings.source === 'sftp' ? 2000 : 1000,
+          source: {
+            size: async () => {
+              const info = await fileAccess.run(serverId, false, (files) => files.stat(logFile));
+              return info?.type === 'file' ? info.size : null;
+            },
+            read: (offset, length) =>
+              fileAccess.run(serverId, false, (files) => files.readRange(logFile, offset, length)),
+          },
+        };
+      },
+      onError: (serverId, err) => app.log.debug({ err, serverId }, 'reading the log failed'),
+    });
+    logs = logHub;
     const events = createEventBus(app.log);
     const plugins = new PluginHost(
       resolvePlugins(options.plugins ?? builtInPlugins, config.plugins),
@@ -168,11 +200,11 @@ export async function buildApp(
         commands: {
           send: (serverId, command) => connectionManager.send(serverId, command),
         },
-        files: createFileAccess(
-          config.filesRoot,
-          (serverId) => servers.filesSettings(serverId),
-          sftpSessions,
-        ),
+        files: fileAccess.api(),
+        logs: {
+          recent: (serverId) => logHub.recent(serverId),
+          subscribe: (serverId, listener) => logHub.subscribe(serverId, listener),
+        },
         hasPermission: async (userId, serverId, permission) => {
           const user = await findUserById(db, userId);
           if (user === undefined || user.disabled_at !== null) return false;
@@ -181,6 +213,8 @@ export async function buildApp(
         registerRoute: (pluginId, route) => registerPluginRoute(app, auth, pluginId, route),
         registerServerRoute: (pluginId, route, games) =>
           registerServerPluginRoute(app, servers, pluginId, route, games),
+        registerServerEvents: (pluginId, stream, games) =>
+          registerServerPluginEvents(app, servers, pluginId, stream, games),
       },
     );
     host = plugins;
@@ -204,7 +238,7 @@ export async function buildApp(
     registerUserRoutes(app, auth);
     registerServerRoutes(app, auth, servers);
     registerConnectionRoutes(app, auth, servers, connectionManager);
-    registerFilesRoutes(app, auth, servers, config.filesRoot, sftpSessions);
+    registerFilesRoutes(app, auth, servers, config.filesRoot, sftpSessions, logHub);
     registerAuditRoutes(app, auth, registry);
     await plugins.start();
 
@@ -340,6 +374,100 @@ function registerServerPluginRoute(
       } as ServerRouteRequest<ServerRouteSchema>);
     },
   });
+}
+
+/** Event streams end after this long; the browser reconnects and its access is checked again. */
+const EVENT_STREAM_LIFETIME_MS = 15 * 60_000;
+/** A comment every so often keeps proxies from closing a quiet stream. */
+const EVENT_STREAM_PING_MS = 25_000;
+
+const eventField = (value: string) => value.replace(/[\r\n]/g, '');
+
+function registerServerPluginEvents(
+  app: FastifyInstance,
+  servers: ServerService,
+  pluginId: string,
+  stream: ServerEventStreamDefinition,
+  games: readonly string[] | null,
+): void {
+  if (!stream.url.startsWith('/')) {
+    throw new Error(`Plugin "${pluginId}" stream URL must start with "/": ${stream.url}`);
+  }
+  app.get(
+    `${API_PREFIX}/servers/:serverId/plugins/${pluginId}${stream.url}`,
+    { schema: { tags: [pluginId], params: z.object({ serverId: z.string() }) } },
+    async (request, reply) => {
+      const { serverId } = request.params as { serverId: string };
+      const access = await servers.require(request, serverId, stream.permission);
+      const server = servers.info(access.server);
+      if (games !== null && !games.includes(server.game)) {
+        throw new HttpError(
+          409,
+          'game_not_supported',
+          `${pluginId} does not support the game of this server`,
+        );
+      }
+      if (stream.capability !== undefined && !server.capabilities.includes(stream.capability)) {
+        throw new HttpError(
+          409,
+          'capability_missing',
+          `This server does not support ${stream.capability}`,
+        );
+      }
+
+      reply.hijack();
+      const raw = reply.raw;
+      raw.writeHead(200, {
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-cache, no-transform',
+        connection: 'keep-alive',
+        // Reverse proxies such as nginx (CapRover) must pass every event on at once.
+        'x-accel-buffering': 'no',
+      });
+      raw.write('retry: 3000\n\n');
+      let closed = false;
+      let stop: (() => void) | undefined;
+      const timers: NodeJS.Timeout[] = [];
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        for (const timer of timers) clearTimeout(timer);
+        stop?.();
+        raw.end();
+      };
+      timers.push(
+        setInterval(() => raw.write(': ping\n\n'), EVENT_STREAM_PING_MS),
+        setTimeout(close, EVENT_STREAM_LIFETIME_MS),
+      );
+      request.raw.on('close', close);
+
+      const lastEventId = request.headers['last-event-id'];
+      try {
+        stop = await stream.open({
+          server,
+          user: toAuthenticatedUser(access.ctx.user),
+          permissions: access.permissions,
+          lastEventId: typeof lastEventId === 'string' ? lastEventId : undefined,
+          send: ({ event, id, data }) => {
+            if (closed) return;
+            raw.write(
+              `${event === undefined ? '' : `event: ${eventField(event)}\n`}` +
+                `${id === undefined ? '' : `id: ${eventField(id)}\n`}` +
+                `data: ${JSON.stringify(data)}\n\n`,
+            );
+          },
+        });
+        if (closed) stop();
+      } catch (err) {
+        if (!(err instanceof HttpError)) request.log.error({ err }, 'event stream failed');
+        if (!closed) {
+          const code = err instanceof HttpError ? err.code : 'internal_error';
+          raw.write(`event: error\ndata: ${JSON.stringify({ code })}\n\n`);
+        }
+        close();
+      }
+    },
+  );
 }
 
 function errorBody(code: string, message: string, details?: unknown): ApiErrorBody {

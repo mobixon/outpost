@@ -7,7 +7,12 @@ export const ConsolePermission = {
   execute: 'console.execute',
   /** Send chat messages to the players. */
   chat: 'chat.send',
+  /** See the live log of the server. */
+  read: 'console.read',
 } as const;
+
+/** Lines of the live log, as the `lines` events of the log stream carry them. */
+export const logLinesSchema = z.array(z.object({ id: z.number(), text: z.string() }));
 
 export const commandRequestSchema = z.object({
   /** Without the leading slash; one is removed if present. */

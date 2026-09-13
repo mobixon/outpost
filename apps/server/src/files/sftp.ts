@@ -158,6 +158,7 @@ function call<T = void>(action: (done: Done<T>) => void): Promise<T> {
 }
 
 const statusOf = (err: unknown) => (err as { code?: unknown } | null)?.code;
+const END_OF_FILE = 1;
 const NO_SUCH_FILE = 2;
 const PERMISSION_DENIED = 3;
 
@@ -336,6 +337,39 @@ export class SftpFiles {
     return guard(async () => {
       const target = await this.#resolve(relative);
       await call((done) => this.sftp.unlink(target, done));
+    });
+  }
+
+  /** Up to `length` bytes of a file from `offset`; fewer at its end. */
+  readRange(relative: string, offset: number, length: number): Promise<Buffer> {
+    return guard(async () => {
+      const target = await this.#resolve(relative);
+      const handle = await call<Buffer>((done) => this.sftp.open(target, 'r', done));
+      try {
+        const buffer = Buffer.alloc(Math.min(length, MAX_FILE_BYTES));
+        let filled = 0;
+        // A server answers a read with at most one packet; ask until the range or the file ends.
+        while (filled < buffer.length) {
+          const bytesRead = await new Promise<number>((resolve, reject) => {
+            this.sftp.read(
+              handle,
+              buffer,
+              filled,
+              buffer.length - filled,
+              offset + filled,
+              (err, bytes) => {
+                if (err && statusOf(err) !== END_OF_FILE) reject(err);
+                else resolve(err ? 0 : bytes);
+              },
+            );
+          });
+          if (bytesRead === 0) break;
+          filled += bytesRead;
+        }
+        return buffer.subarray(0, filled);
+      } finally {
+        await call((done) => this.sftp.close(handle, done)).catch(() => undefined);
+      }
     });
   }
 }

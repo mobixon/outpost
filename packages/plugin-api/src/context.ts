@@ -2,6 +2,7 @@ import type { PluginInfo } from '@outpost/shared';
 import type { Kysely } from 'kysely';
 import type { EventBus } from './events.js';
 import type { FileEntry, FileStat } from './files.js';
+import type { LogLine } from './logs.js';
 import type { HttpRegistry } from './http.js';
 import type { ServerInfo } from './servers.js';
 
@@ -71,6 +72,19 @@ export interface PluginContext {
     stat(serverId: string, path: string): Promise<FileStat | null>;
     /** The entries of a directory, sorted by name; `''` is the server's folder. */
     list(serverId: string, path: string): Promise<FileEntry[]>;
+  };
+  /**
+   * The log of a game server, followed while somebody listens. Needs the capability `logs.stream`,
+   * otherwise throws an HttpError 409.
+   */
+  readonly logs: {
+    /** The last lines of the log (up to 1000), oldest first. */
+    recent(serverId: string): Promise<LogLine[]>;
+    /**
+     * Calls `listener` with the new lines as the server writes them; resolves with a function that
+     * stops. Lines written between `recent` and `subscribe` in one go are not lost.
+     */
+    subscribe(serverId: string, listener: (lines: LogLine[]) => void): Promise<() => void>;
   };
   readonly permissions: {
     /** Whether the user has the permission on the server; superadmins have all. */

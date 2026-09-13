@@ -9,5 +9,6 @@ export * from './db.js';
 export * from './events.js';
 export * from './files.js';
 export * from './http.js';
+export * from './logs.js';
 export * from './manifest.js';
 export * from './servers.js';
