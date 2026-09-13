@@ -86,6 +86,19 @@ enough to write a plugin.
 - Keep one logical change per PR, with tests and docs updated.
 - CI must be green before merging. PRs are squash-merged.
 
+## Releases
+
+Maintainers release by pushing a version tag on `main`:
+
+```sh
+git tag v0.1.0-rc.1 && git push origin v0.1.0-rc.1
+```
+
+The [release workflow](.github/workflows/release.yml) builds and smoke-tests the image, pushes it
+to `ghcr.io/mobixon/outpost` and creates the GitHub Release with generated notes. `vX.Y.Z` also
+moves the `X.Y` and `latest` image tags; tags with a suffix, such as `-rc.1`, are pre-releases and
+move nothing else.
+
 ## Code style
 
 - Prettier and ESLint decide formatting and most style questions.

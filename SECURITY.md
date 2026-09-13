@@ -23,6 +23,10 @@ disclosure date with you. Reporters are credited in the advisory unless they pre
 
 ## Deployment notes
 
-Outpost talks to the Docker Engine. Direct access to the Docker socket is equivalent to root on the
-host, so the recommended setups put a socket proxy with a read-only allowlist between Outpost and
-Docker. Keep RCON ports off the public internet and enable 2FA for every administrator.
+Version 0.1 connects to game servers over RCON only and needs no access to Docker. Keep RCON ports
+off the public internet (RCON is not encrypted), serve Outpost over HTTPS and enable 2FA for every
+administrator — see [docs/install.md](docs/install.md).
+
+The planned full connection will talk to the Docker Engine. Direct access to the Docker socket is
+equivalent to root on the host, so the recommended setups will put a socket proxy with a read-only
+allowlist between Outpost and Docker.
