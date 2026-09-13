@@ -245,6 +245,7 @@ export default {
     already_member: 'This user is already a member.',
     role_not_allowed: 'You cannot manage members with this role.',
     capability_missing: 'This server does not support that yet.',
+    game_not_supported: 'This module does not support the game of this server.',
     invalid_cursor: 'Reload the page and try again.',
     connection_refused: 'The server refused the connection: check the port and that RCON is on.',
     host_not_found: 'The host name cannot be resolved.',
@@ -326,12 +327,15 @@ export default {
     },
   },
   games: {
-    minecraftJava: 'Minecraft: Java Edition',
+    'minecraft-java': 'Minecraft: Java Edition',
   },
   servers: {
     add: {
       title: 'Add a server',
-      text: 'Then connect it over RCON in its settings and set up its team.',
+      text: 'Choose its game, which cannot be changed later. Then connect the server in its settings and set up its team.',
+      game: 'Game',
+      gameHint: 'The modules of a server depend on its game, so it cannot be changed later.',
+      gameFixed: 'Chosen when the server was added; it cannot be changed.',
       name: 'Name',
       slug: 'Short name',
       slugHint: 'Used in addresses: lowercase letters, digits and dashes.',
@@ -340,7 +344,6 @@ export default {
     connection: {
       title: 'RCON',
       text: 'Console commands, chat and players over the RCON port of the server. Only superadmins change the connectors of a server.',
-      game: 'Game',
       host: 'Host',
       hostHint:
         'Name or address under which Outpost reaches the server, e.g. the container or service name in a shared Docker network. Never open the RCON port to the internet.',

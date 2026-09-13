@@ -44,14 +44,13 @@ async function setUp(plugins: readonly PluginDefinition[] = [consolePlugin, sche
   const admin = await setUpAdmin(outpost);
   const created = await send(outpost, 'POST', '/api/v1/servers', {
     cookie: admin,
-    body: { name: 'Survival', slug: 'survival' },
+    body: { name: 'Survival', slug: 'survival', game: 'minecraft-java' },
   });
   const serverId = created.json<{ id: string }>().id;
   await send(outpost, 'PUT', `/api/v1/servers/${serverId}/connection`, {
     cookie: admin,
     body: {
       type: 'rcon',
-      game: 'minecraft-java',
       host: '127.0.0.1',
       port: rcon.port,
       password: 'secret',

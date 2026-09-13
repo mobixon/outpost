@@ -35,7 +35,7 @@ import { useShell } from '../../shell.js';
 import ConnectionCard from './ConnectionCard.vue';
 import FilesCard from './FilesCard.vue';
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 const isSuperadmin = useShell().session?.user?.isSuperadmin === true;
 const errorMessage = useErrorMessage();
 const router = useRouter();
@@ -95,6 +95,13 @@ const remove = () =>
       <CardContent>
         <form class="flex max-w-md flex-col gap-4" @submit.prevent="save">
           <FieldGroup>
+            <Field>
+              <FieldLabel>{{ t('servers.add.game') }}</FieldLabel>
+              <p class="text-sm" data-testid="server-game">
+                {{ te(`games.${server.game}`) ? t(`games.${server.game}`) : server.game }}
+              </p>
+              <FieldDescription>{{ t('servers.add.gameFixed') }}</FieldDescription>
+            </Field>
             <Field>
               <FieldLabel for="settings-name">{{ t('servers.add.name') }}</FieldLabel>
               <Input id="settings-name" v-model="form.name" maxlength="64" required />

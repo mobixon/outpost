@@ -71,7 +71,7 @@ export function registerServerRoutes(
         userId: user.id,
         serverId: server.id,
         ip: request.ip,
-        details: { name: server.name, slug: server.slug },
+        details: { name: server.name, slug: server.slug, game: server.game },
       });
       const access = await servers.access(user, server.id);
       if (access === undefined) throw new Error('A new server must be visible to its creator');

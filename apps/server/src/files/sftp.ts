@@ -418,12 +418,13 @@ export class SftpSessions {
 
 /**
  * Checks an SFTP connector step by step: the host answers and presents a key (the pinned one, if
- * any), the login works, the folder exists and holds `server.properties`, and — when writing is
- * wanted — new files get the owner of the server's files.
+ * any), the login works, the folder exists and holds the data file of the game (see
+ * `testFolder`), and — when writing is wanted — new files get the owner of the server's files.
  */
 export async function testSftp(
   target: SftpTarget,
   writable: boolean,
+  dataFile: string | null = 'server.properties',
   timeoutMs = 10_000,
 ): Promise<FilesTestResult> {
   type Step = FilesTestResult['steps'][number];
@@ -433,7 +434,13 @@ export async function testSftp(
   const location = step('folder');
   const properties = step('properties');
   const write = step('write');
-  const steps = [connect, auth, location, properties, ...(writable ? [write] : [])];
+  const steps = [
+    connect,
+    auth,
+    location,
+    ...(dataFile === null ? [] : [properties]),
+    ...(writable ? [write] : []),
+  ];
   let hostKey: string | null = null;
   let current = connect;
   let session: SftpSession | undefined;
@@ -461,14 +468,16 @@ export async function testSftp(
     location.ok = true;
     location.detail = real;
 
-    current = properties;
-    const text = await files.read('server.properties').catch((err: unknown) => {
-      throw err instanceof HttpError && err.code === 'file_not_found'
-        ? new HttpError(400, 'properties_not_found', 'No server.properties in the folder')
-        : err;
-    });
-    properties.ok = true;
-    properties.detail = describeProperties(text.toString('utf8'));
+    if (dataFile !== null) {
+      current = properties;
+      const text = await files.read(dataFile).catch((err: unknown) => {
+        throw err instanceof HttpError && err.code === 'file_not_found'
+          ? new HttpError(400, 'properties_not_found', `No ${dataFile} in the folder`)
+          : err;
+      });
+      properties.ok = true;
+      properties.detail = describeProperties(text.toString('utf8'));
+    }
 
     if (writable) {
       current = write;
@@ -476,11 +485,11 @@ export async function testSftp(
       await files.write(probe, 'ok');
       try {
         const [owner, written] = await Promise.all([
-          files.owner('server.properties'),
+          files.owner(dataFile ?? ''),
           files.owner(probe),
         ]);
         if (owner !== undefined && written !== undefined && owner !== written) {
-          write.detail = `server.properties: UID ${owner}, new files: UID ${written}`;
+          write.detail = `${dataFile ?? 'the folder'}: UID ${owner}, new files: UID ${written}`;
           throw new HttpError(400, 'owner_mismatch', 'New files get another owner');
         }
       } finally {

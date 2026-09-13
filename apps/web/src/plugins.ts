@@ -13,13 +13,19 @@ export const builtInWebPlugins: readonly WebPluginDefinition[] = [
   schedulerPlugin,
 ];
 
+export interface EnabledPlugins {
+  plugins: WebPluginDefinition[];
+  /** The games each plugin supports, as the server reports them; null for any game. */
+  games: ReadonlyMap<string, readonly string[] | null>;
+}
+
 /** Web parts of the plugins the server reports as enabled (needs a signed-in user). */
-export async function loadEnabledPlugins(): Promise<WebPluginDefinition[]> {
+export async function loadEnabledPlugins(): Promise<EnabledPlugins> {
   try {
     const { plugins } = await apiFetch(`${API_PREFIX}/plugins`, pluginListSchema);
-    const enabled = new Set(plugins.map((plugin) => plugin.id));
-    return builtInWebPlugins.filter((plugin) => enabled.has(plugin.id));
+    const games = new Map(plugins.map((plugin) => [plugin.id, plugin.games]));
+    return { plugins: builtInWebPlugins.filter((plugin) => games.has(plugin.id)), games };
   } catch {
-    return [];
+    return { plugins: [], games: new Map() };
   }
 }

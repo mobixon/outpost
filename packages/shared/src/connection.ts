@@ -1,9 +1,29 @@
 import { z } from 'zod';
 
-/** Games Outpost knows. */
+/** Games Outpost knows. A server is of one game, chosen when it is added, and never changes. */
 export const GAME_IDS = ['minecraft-java'] as const;
 export type GameId = (typeof GAME_IDS)[number];
 export const gameIdSchema = z.enum(GAME_IDS);
+
+/** Game ids are lowercase words joined by dashes; modules may name games Outpost does not know. */
+export const GAME_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** What the connectors need to know about a game. */
+export interface GameDefaults {
+  /** The usual RCON port of its servers. */
+  rconPort: number;
+  /** A file in the data folder of every server of the game, which the Files test looks for. */
+  dataFile: string;
+}
+
+const GAME_DEFAULTS: Record<GameId, GameDefaults> = {
+  'minecraft-java': { rconPort: 25575, dataFile: 'server.properties' },
+};
+
+/** The defaults of a game; undefined for a game Outpost does not know. */
+export function gameDefaults(game: string): GameDefaults | undefined {
+  return (GAME_DEFAULTS as Partial<Record<string, GameDefaults>>)[game];
+}
 
 /**
  * Connectors link a server to Outpost. Each one is set up and tested on its own and adds
@@ -34,7 +54,6 @@ const hostSchema = z
 
 export const rconConnectionInputSchema = z.object({
   type: z.literal('rcon'),
-  game: gameIdSchema,
   host: hostSchema,
   port: z.number().int().min(1).max(65535),
   /** Omit to keep the stored password. */
@@ -45,7 +64,6 @@ export type RconConnectionInput = z.infer<typeof rconConnectionInputSchema>;
 /** A connection as the API shows it; the password never leaves the server. */
 export const connectionInfoSchema = z.object({
   type: z.literal('rcon'),
-  game: gameIdSchema,
   host: z.string(),
   port: z.number().int(),
   hasPassword: z.boolean(),

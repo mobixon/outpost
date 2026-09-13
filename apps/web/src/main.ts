@@ -15,7 +15,9 @@ async function bootstrap(): Promise<void> {
   // The theme saved in the account wins over the one this browser remembers.
   adoptAccountTheme(session?.user?.theme);
   const signedIn = session?.status === 'active' && !session.twoFactorEnrollmentRequired;
-  const plugins = signedIn ? await loadEnabledPlugins() : [];
+  const { plugins, games } = signedIn
+    ? await loadEnabledPlugins()
+    : { plugins: [], games: new Map<string, readonly string[] | null>() };
 
   // When the session ends while the app is open, start over at the login page.
   onUnauthenticated(() => {
@@ -28,7 +30,7 @@ async function bootstrap(): Promise<void> {
     .use(createAppRouter(plugins, session))
     .provide(shellKey, {
       navItems: buildNavItems(plugins, signedIn ? session : null),
-      serverTabs: buildServerTabs(plugins),
+      serverTabs: buildServerTabs(plugins, games),
       session,
     })
     .mount('#app');

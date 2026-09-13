@@ -44,15 +44,15 @@ export function registerConnectionRoutes(
         request.params.serverId,
         { sudo: true },
       );
-      const { game, host, port, password } = request.body;
-      await servers.saveConnection(server, { game, host, port, password });
+      const { host, port, password } = request.body;
+      await servers.saveConnection(server, { host, port, password });
       connections.reset(server.id);
       await auth.audit.record({
         action: 'server.connection_updated',
         userId: ctx.user.id,
         serverId: server.id,
         ip: request.ip,
-        details: { type: 'rcon', game, host, port, passwordChanged: password !== undefined },
+        details: { type: 'rcon', host, port, passwordChanged: password !== undefined },
       });
       return reply.code(204).send();
     },

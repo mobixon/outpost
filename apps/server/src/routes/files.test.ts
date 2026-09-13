@@ -58,7 +58,7 @@ async function setUp() {
   const admin = await setUpAdmin(server);
   const created = await send(server, 'POST', '/api/v1/servers', {
     cookie: admin,
-    body: { name: 'Survival', slug: 'survival' },
+    body: { name: 'Survival', slug: 'survival', game: 'minecraft-java' },
   });
   const serverId = created.json<{ id: string }>().id;
   const owner = await createUserWithInvitation(server, admin, 'the-owner', {

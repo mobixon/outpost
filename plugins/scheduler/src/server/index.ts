@@ -27,6 +27,8 @@ export default definePlugin({
   id: SCHEDULER_PLUGIN_ID,
   version: '0.1.0',
   apiVersion: PLUGIN_API_VERSION,
+  // Announcements use tellraw and & color codes, "only with players" asks `list`: Minecraft only.
+  games: ['minecraft-java'],
   migrations,
   permissions: [
     { key: SchedulerPermission.view, roles: ['owner', 'admin', 'moderator', 'viewer'] },

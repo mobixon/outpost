@@ -85,9 +85,22 @@ describe('buildServerTabs', () => {
         icon: TestIcon,
         permission: 'console.read',
         capability: 'logs.stream',
+        games: null,
         order: 100,
       },
     ]);
+  });
+
+  it('gives the tabs the games of their plugin, as the server reports them', () => {
+    const plugin = defineWebPlugin({
+      id: 'test.players',
+      apiVersion: WEB_PLUGIN_API_VERSION,
+      serverTabs: [
+        { key: 'players', label: 'x', icon: TestIcon, component: TestIcon, permission: 'x.y' },
+      ],
+    });
+    const games = new Map([['test.players', ['minecraft-java']]]);
+    expect(buildServerTabs([plugin], games)[0]?.games).toEqual(['minecraft-java']);
   });
 
   it('rejects reserved tab keys', () => {

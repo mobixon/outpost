@@ -4,6 +4,7 @@ import {
   API_PREFIX,
   connectionStateSchema,
   connectionTestResultSchema,
+  gameDefaults,
   RCON_DEFAULT_PORT,
   type ConnectionTestResult,
 } from '@outpost/shared';
@@ -22,11 +23,6 @@ import {
   FieldGroup,
   FieldLabel,
   Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Spinner,
 } from '@outpost/ui';
 import { apiFetch, apiSend, useServerContext } from '@outpost/web-plugin-api';
@@ -41,12 +37,9 @@ import { loadServers } from '../../servers.js';
 const { t, te } = useI18n();
 const errorMessage = useErrorMessage();
 const { server, reload } = useServerContext();
-const form = reactive({
-  game: 'minecraft-java',
-  host: '',
-  port: String(RCON_DEFAULT_PORT),
-  password: '',
-});
+/** The usual RCON port of the game of the server. */
+const defaultPort = String(gameDefaults(server.value.game)?.rconPort ?? RCON_DEFAULT_PORT);
+const form = reactive({ host: '', port: defaultPort, password: '' });
 const hasPassword = ref(false);
 const saved = ref(false);
 const result = ref<ConnectionTestResult | null>(null);
@@ -62,7 +55,6 @@ const capabilities = computed(() =>
 );
 const body = () => ({
   type: 'rcon' as const,
-  game: form.game,
   host: form.host.trim(),
   port: Number(form.port),
   ...(form.password !== '' && { password: form.password }),
@@ -73,7 +65,6 @@ async function load(): Promise<void> {
   hasPassword.value = connection?.hasPassword ?? false;
   if (connection !== null) {
     Object.assign(form, {
-      game: connection.game,
       host: connection.host,
       port: String(connection.port),
       password: '',
@@ -112,7 +103,7 @@ const save = () =>
 const remove = () =>
   run('remove', async () => {
     await withSudo(() => apiSend('DELETE', path.value));
-    Object.assign(form, { host: '', port: String(RCON_DEFAULT_PORT), password: '' });
+    Object.assign(form, { host: '', port: defaultPort, password: '' });
     hasPassword.value = false;
     result.value = null;
     await Promise.all([reload(), loadServers()]);
@@ -147,16 +138,6 @@ onMounted(() => {
       <div v-if="busy === 'load'" class="flex justify-center py-4"><Spinner /></div>
       <form v-else class="flex flex-col gap-4" @submit.prevent="save">
         <FieldGroup class="grid gap-4 sm:grid-cols-2">
-          <Field>
-            <FieldLabel for="connection-game">{{ t('servers.connection.game') }}</FieldLabel>
-            <Select v-model="form.game">
-              <SelectTrigger id="connection-game" class="w-full"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="minecraft-java">{{ t('games.minecraftJava') }}</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <div />
           <Field>
             <FieldLabel for="connection-host">{{ t('servers.connection.host') }}</FieldLabel>
             <Input
