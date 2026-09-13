@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   openSftp,
   SftpFiles,
-  SftpSessions,
+  //SftpSessions,
   testSftp,
   type SftpSession,
   type SftpTarget,
@@ -141,7 +141,7 @@ describe.skipIf(server === undefined)('SFTP against a real server', { timeout: 3
   });
 
   // it('shares one session per server until the settings change', async () => {
-  //   const sessions = new SftpSessions();
+  //   const sessions = new SftpSessionsz();
   //   try {
   //     const read = (changes: Partial<SftpTarget> = {}) =>
   //       sessions.use('server-1', target(changes), async (files) =>
