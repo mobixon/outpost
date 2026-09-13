@@ -200,7 +200,8 @@ export function describeProperties(text: string): string | null {
 }
 
 /**
- * Checks a server folder step by step: it exists, it holds `server.properties`, and — when
+ * Checks a server folder step by step: it exists, it holds the data file of the game
+ * (`server.properties` for Minecraft; the step is left out for games without one), and — when
  * writing is wanted — Outpost can write there as the owner of the files. Atomic writes replace
  * files, so files written by another user would change their owner.
  */
@@ -208,13 +209,18 @@ export async function testFolder(
   root: string,
   folder: string,
   writable: boolean,
+  dataFile: string | null = 'server.properties',
 ): Promise<FilesTestResult> {
   type Step = FilesTestResult['steps'][number];
   const step = (name: Step['step']): Step => ({ step: name, ok: null, error: null, detail: null });
   const location = step('folder');
   const properties = step('properties');
   const write = step('write');
-  const steps = writable ? [location, properties, write] : [location, properties];
+  const steps = [
+    location,
+    ...(dataFile === null ? [] : [properties]),
+    ...(writable ? [write] : []),
+  ];
   let current = location;
   try {
     const files = new FolderFiles(root, folder);
@@ -225,22 +231,24 @@ export async function testFolder(
     location.ok = true;
     location.detail = real;
 
-    current = properties;
-    const text = await files.read('server.properties').catch((err: unknown) => {
-      const mapped = toFilesError(err);
-      throw mapped instanceof HttpError && mapped.code === 'file_not_found'
-        ? new HttpError(400, 'properties_not_found', 'No server.properties in the folder')
-        : mapped;
-    });
-    properties.ok = true;
-    properties.detail = describeProperties(text.toString('utf8'));
+    if (dataFile !== null) {
+      current = properties;
+      const text = await files.read(dataFile).catch((err: unknown) => {
+        const mapped = toFilesError(err);
+        throw mapped instanceof HttpError && mapped.code === 'file_not_found'
+          ? new HttpError(400, 'properties_not_found', `No ${dataFile} in the folder`)
+          : mapped;
+      });
+      properties.ok = true;
+      properties.detail = describeProperties(text.toString('utf8'));
+    }
 
     if (writable) {
       current = write;
-      const owner = (await stat(path.join(real, 'server.properties'))).uid;
+      const owner = (await stat(path.join(real, dataFile ?? '.'))).uid;
       const uid = process.getuid?.();
       if (uid !== undefined && owner !== uid) {
-        write.detail = `server.properties: UID ${owner}, Outpost: UID ${uid}`;
+        write.detail = `${dataFile ?? 'the folder'}: UID ${owner}, Outpost: UID ${uid}`;
         throw new HttpError(400, 'owner_mismatch', 'Outpost runs as another user than the files');
       }
       const probe = `.outpost-write-test-${randomBytes(6).toString('hex')}`;

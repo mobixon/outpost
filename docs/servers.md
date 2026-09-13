@@ -5,8 +5,14 @@ members of, and on each server they can do what their role allows.
 
 ## Servers
 
-Superadmins add servers on the home page with a name and a short name, which appears in the
-addresses of the web UI (`/servers/<short name>`), and connect them under **Settings**.
+Superadmins add servers on the home page with a game, a name and a short name, which appears in
+the addresses of the web UI (`/servers/<short name>`), and connect them under **Settings**.
+
+Every server is of one **game**, chosen when it is added. It cannot be changed, because everything
+else depends on it: the game decides the defaults of the connectors, the connectors decide the
+capabilities of the server, and the capabilities and the game decide which modules it has. Modules
+declare the games they support; this version knows Minecraft: Java Edition, and all its modules
+are for Minecraft.
 
 Owners rename a server and delete it under **Settings**. Deleting removes the server from Outpost
 with its members and invitations; the game server itself is not touched, and the audit log keeps
@@ -192,6 +198,7 @@ export default definePlugin({
   id: 'acme.greeter',
   version: '1.0.0',
   apiVersion: PLUGIN_API_VERSION,
+  games: ['minecraft-java'], // leave out for a module that works with any game
   permissions: [{ key: 'greeter.greet', roles: ['owner', 'admin', 'moderator'] }],
   setup(ctx) {
     ctx.http.serverRoute({
@@ -209,7 +216,11 @@ export default definePlugin({
 ```
 
 Outpost answers `404` when the user cannot see the server, `403` without the permission and `409`
-when the server lacks the capability, before the handler runs. `ctx.commands.send(serverId, command)` runs a console command
+when the plugin does not support the game of the server or the server lacks the capability,
+before the handler runs. `games` lists the games a plugin supports (ids such as `minecraft-java`,
+also of games Outpost does not know yet); a plugin without `games` works with any game. Its tabs
+show only on servers of these games, and `ctx.servers.supports(server)` tells background jobs
+which servers are theirs. `ctx.commands.send(serverId, command)` runs a console command
 through the RCON connector (capability `commands.send`), `ctx.files` reads, writes, stats and lists the files of the server through the Files connector (`files.read`, `files.write`; paths relative to the server's folder), `ctx.permissions.has()` checks a permission elsewhere (for example for live updates), and `ctx.secrets` encrypts secrets the plugin
 stores. The web part of a plugin adds a tab to the server page with `serverTabs`, shown to users
 with the tab's permission.

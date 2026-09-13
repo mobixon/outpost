@@ -1,4 +1,5 @@
 import type { Migration } from '@outpost/plugin-api';
+import { sql } from 'kysely';
 
 /** Migration scope of the core tables; reserved, so no plugin can use this id. */
 export const CORE_SCOPE = 'outpost.core';
@@ -210,6 +211,13 @@ export const coreMigrations: readonly Migration[] = [
     name: '0007_server_files',
     async up(db, { types }) {
       await db.schema.alterTable('servers').addColumn('files', types.json).execute();
+    },
+  },
+  {
+    // Every server is of one game from now on; the servers added before were Minecraft servers.
+    name: '0008_server_game',
+    async up(db) {
+      await sql`update servers set game = 'minecraft-java' where game is null`.execute(db);
     },
   },
 ];

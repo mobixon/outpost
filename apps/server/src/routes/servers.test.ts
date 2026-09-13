@@ -69,7 +69,7 @@ afterEach(async () => {
 async function createServer(server: FastifyInstance, admin: string, slug = 'survival') {
   const response = await send(server, 'POST', '/api/v1/servers', {
     cookie: admin,
-    body: { name: `Server ${slug}`, slug },
+    body: { name: `Server ${slug}`, slug, game: 'minecraft-java' },
   });
   expect(response.statusCode, response.body).toBe(201);
   return response.json<{ id: string }>().id;
@@ -103,7 +103,7 @@ describe('servers', () => {
     });
     const taken = await send(server, 'POST', '/api/v1/servers', {
       cookie: admin,
-      body: { name: 'Other', slug: 'survival' },
+      body: { name: 'Other', slug: 'survival', game: 'minecraft-java' },
     });
     expect(taken.json()).toMatchObject({ error: { code: 'slug_taken' } });
 
@@ -112,7 +112,7 @@ describe('servers', () => {
     expect((await get(server, `/api/v1/servers/${serverId}`, ann.cookie)).statusCode).toBe(404);
     const create = await send(server, 'POST', '/api/v1/servers', {
       cookie: ann.cookie,
-      body: { name: 'Mine', slug: 'mine' },
+      body: { name: 'Mine', slug: 'mine', game: 'minecraft-java' },
     });
     expect(create.statusCode).toBe(403);
 
@@ -440,7 +440,13 @@ describe('plugin access to servers', () => {
     );
     expect(await plugin.permissions.has(members.outsider.id, serverId, 'test.read')).toBe(false);
     expect(await plugin.servers.list()).toEqual([
-      { id: serverId, slug: 'survival', name: 'Server survival', game: null, capabilities: [] },
+      {
+        id: serverId,
+        slug: 'survival',
+        name: 'Server survival',
+        game: 'minecraft-java',
+        capabilities: [],
+      },
     ]);
     const sealed = plugin.secrets.seal('rcon password');
     expect(sealed).not.toContain('rcon');

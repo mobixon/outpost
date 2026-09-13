@@ -3,12 +3,10 @@ import { HttpError, type ServerInfo } from '@outpost/plugin-api';
 import {
   Capability,
   CorePermission,
-  gameIdSchema,
   type ConnectionInfo,
   type ConnectorType,
   type FilesInfo,
   type FilesInput,
-  type GameId,
   type RoleKey,
   type ServerSummary,
 } from '@outpost/shared';
@@ -199,8 +197,10 @@ export class ServerService {
     return parseColumn(server.files, storedFilesSchema);
   }
 
-  gameOf(server: ServerRow): GameId | null {
-    return gameIdSchema.safeParse(server.game).data ?? null;
+  /** The game of the server, chosen when it was added; it never changes. */
+  gameOf(server: ServerRow): string {
+    // Every server has a game since migration 0008; the fallback only satisfies the column type.
+    return server.game ?? 'minecraft-java';
   }
 
   connectors(server: ServerRow): ConnectorType[] {
@@ -222,11 +222,9 @@ export class ServerService {
 
   connectionInfo(server: ServerRow): ConnectionInfo | null {
     const connection = this.connectionOf(server);
-    const game = this.gameOf(server);
-    if (connection === null || game === null) return null;
+    if (connection === null) return null;
     return {
       type: connection.type,
-      game,
       host: connection.host,
       port: connection.port,
       hasPassword: connection.password !== '',
@@ -236,7 +234,7 @@ export class ServerService {
   /** Stores an RCON connection; without a new password the stored one is kept. */
   async saveConnection(
     server: ServerRow,
-    input: { game: GameId; host: string; port: number; password?: string | undefined },
+    input: { host: string; port: number; password?: string | undefined },
   ): Promise<void> {
     const password =
       input.password !== undefined
@@ -253,7 +251,7 @@ export class ServerService {
     };
     await this.db
       .updateTable('servers')
-      .set({ game: input.game, connection: JSON.stringify(connection), updated_at: Date.now() })
+      .set({ connection: JSON.stringify(connection), updated_at: Date.now() })
       .where('id', '=', server.id)
       .execute();
   }
@@ -428,13 +426,13 @@ export class ServerService {
     return (await query.executeTakeFirst()) !== undefined;
   }
 
-  async create(input: { name: string; slug: string }): Promise<ServerRow> {
+  async create(input: { name: string; slug: string; game: string }): Promise<ServerRow> {
     const now = Date.now();
     const server: ServerRow = {
       id: randomUUID(),
       slug: input.slug,
       name: input.name,
-      game: null,
+      game: input.game,
       connection: null,
       files: null,
       created_at: now,

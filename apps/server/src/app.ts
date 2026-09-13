@@ -179,8 +179,8 @@ export async function buildApp(
           return (await servers.access(user, serverId))?.permissions.has(permission) ?? false;
         },
         registerRoute: (pluginId, route) => registerPluginRoute(app, auth, pluginId, route),
-        registerServerRoute: (pluginId, route) =>
-          registerServerPluginRoute(app, servers, pluginId, route),
+        registerServerRoute: (pluginId, route, games) =>
+          registerServerPluginRoute(app, servers, pluginId, route, games),
       },
     );
     host = plugins;
@@ -293,6 +293,7 @@ function registerServerPluginRoute(
   servers: ServerService,
   pluginId: string,
   route: ServerRouteDefinition<ServerRouteSchema>,
+  games: readonly string[] | null,
 ): void {
   if (route.url !== '' && !route.url.startsWith('/')) {
     throw new Error(`Plugin "${pluginId}" route URL must start with "/": ${route.url}`);
@@ -314,6 +315,13 @@ function registerServerPluginRoute(
         sudo: route.sudo ?? false,
       });
       const server = servers.info(access.server);
+      if (games !== null && !games.includes(server.game)) {
+        throw new HttpError(
+          409,
+          'game_not_supported',
+          `${pluginId} does not support the game of this server`,
+        );
+      }
       if (route.capability !== undefined && !server.capabilities.includes(route.capability)) {
         throw new HttpError(
           409,

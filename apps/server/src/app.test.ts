@@ -109,7 +109,7 @@ describe('system routes', () => {
 
     const cookie = await setUpAdmin(server);
     expect((await get(server, '/api/v1/plugins', cookie)).json()).toEqual({
-      plugins: [{ id: 'test.echo', version: '1.2.3' }],
+      plugins: [{ id: 'test.echo', version: '1.2.3', games: null }],
     });
   });
 

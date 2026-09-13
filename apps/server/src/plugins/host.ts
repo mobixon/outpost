@@ -112,14 +112,22 @@ export interface PluginHostOptions {
   permissions: PermissionRegistry;
   /** Key material for the plugins' secret boxes. */
   secretKey: string;
-  servers: PluginContext['servers'];
+  servers: Omit<PluginContext['servers'], 'supports'>;
   commands: PluginContext['commands'];
   files: PluginContext['files'];
   hasPermission: PluginContext['permissions']['has'];
   /** Mounts a plugin route on the HTTP server. */
   registerRoute(pluginId: string, route: RouteDefinition<RouteSchema, RouteAccess>): void;
-  /** Mounts a plugin route of a game server on the HTTP server. */
-  registerServerRoute(pluginId: string, route: ServerRouteDefinition<ServerRouteSchema>): void;
+  /** Mounts a plugin route of a game server; `games` are those the plugin supports (null: all). */
+  registerServerRoute(
+    pluginId: string,
+    route: ServerRouteDefinition<ServerRouteSchema>,
+    games: readonly string[] | null,
+  ): void;
+}
+
+function infoOf({ id, version, games }: PluginDefinition): PluginInfo {
+  return { id, version, games: games === undefined ? null : [...games] };
 }
 
 /** Runs plugin migrations and `setup` in dependency order, and plugin cleanups on shutdown. */
@@ -139,7 +147,7 @@ export class PluginHost {
   }
 
   list(): PluginInfo[] {
-    return this.#plugins.map(({ id, version }) => ({ id, version }));
+    return this.#plugins.map(infoOf);
   }
 
   async start(): Promise<void> {
@@ -164,7 +172,7 @@ export class PluginHost {
       };
       const secrets = new SecretBox(this.#options.secretKey, `plugin:${plugin.id}`);
       const ctx: PluginContext = {
-        plugin: { id: plugin.id, version: plugin.version },
+        plugin: infoOf(plugin),
         instance: { version: instanceVersion },
         logger: toPluginLogger(log),
         events,
@@ -186,11 +194,15 @@ export class PluginHost {
             this.#options.registerServerRoute(
               plugin.id,
               route as unknown as ServerRouteDefinition<ServerRouteSchema>,
+              plugin.games ?? null,
             );
           },
         },
         kv: createKeyValueStore(db, plugin.id),
-        servers: this.#options.servers,
+        servers: {
+          ...this.#options.servers,
+          supports: (server) => plugin.games === undefined || plugin.games.includes(server.game),
+        },
         commands: this.#options.commands,
         files: this.#options.files,
         permissions: { has: this.#options.hasPermission },

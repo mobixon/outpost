@@ -4,6 +4,7 @@ import {
   filesInputSchema,
   filesStateSchema,
   filesTestResultSchema,
+  gameDefaults,
   type FilesInput,
   type FilesTestResult,
 } from '@outpost/shared';
@@ -13,7 +14,7 @@ import { z } from 'zod';
 import type { AuthService } from '../auth/service.js';
 import { testFolder } from '../files/folder.js';
 import { testSftp, type SftpSessions, type SftpTarget } from '../files/sftp.js';
-import type { ServerService } from '../servers/service.js';
+import type { ServerRow, ServerService } from '../servers/service.js';
 
 /** What the audit log keeps of the Files connector: no passwords or keys. */
 function auditDetails(input: FilesInput, sftp: SftpTarget | undefined): Record<string, unknown> {
@@ -49,6 +50,8 @@ export function registerFilesRoutes(
   const tags = ['servers'];
   const url = `${API_PREFIX}/servers/:serverId/files`;
   const params = z.object({ serverId: z.string() });
+  /** The file every server of the game has in its data folder; the test looks for it. */
+  const dataFileOf = (server: ServerRow) => gameDefaults(servers.gameOf(server))?.dataFile ?? null;
 
   app.get(
     url,
@@ -64,10 +67,11 @@ export function registerFilesRoutes(
       sudo: true,
     });
     const input = request.body;
+    const dataFile = dataFileOf(server);
     let result: FilesTestResult;
     let sftp: SftpTarget | undefined;
     if (input.source === 'folder') {
-      result = await testFolder(root, input.path, input.writable);
+      result = await testFolder(root, input.path, input.writable, dataFile);
     } else {
       sftp = servers.sftpTarget(server, input);
       if (sftp.hostKey === undefined) {
@@ -77,7 +81,7 @@ export function registerFilesRoutes(
           'Test the connection and confirm the host key',
         );
       }
-      result = await testSftp(sftp, input.writable);
+      result = await testSftp(sftp, input.writable, dataFile);
     }
     if (!result.ok) {
       throw new HttpError(400, 'files_test_failed', 'The files did not pass the test', result);
@@ -119,9 +123,10 @@ export function registerFilesRoutes(
     async (request) => {
       const { server } = await servers.requireConnectorAdmin(request, request.params.serverId);
       const input = request.body;
+      const dataFile = dataFileOf(server);
       return input.source === 'folder'
-        ? testFolder(root, input.path, input.writable)
-        : testSftp(servers.sftpTarget(server, input), input.writable);
+        ? testFolder(root, input.path, input.writable, dataFile)
+        : testSftp(servers.sftpTarget(server, input), input.writable, dataFile);
     },
   );
 }

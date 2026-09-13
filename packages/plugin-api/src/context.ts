@@ -46,6 +46,8 @@ export interface PluginContext {
   readonly servers: {
     get(id: string): Promise<ServerInfo | undefined>;
     list(): Promise<ServerInfo[]>;
+    /** Whether the plugin supports the game of the server (see `games` of the plugin). */
+    supports(server: ServerInfo): boolean;
   };
   readonly commands: {
     /**

@@ -1,4 +1,4 @@
-import { isValidPluginId, ROLE_KEYS } from '@outpost/shared';
+import { GAME_ID_PATTERN, isValidPluginId, ROLE_KEYS } from '@outpost/shared';
 import type { PluginContext } from './context.js';
 import type { Migration } from './db.js';
 import { PERMISSION_KEY_PATTERN, type PermissionDeclaration } from './servers.js';
@@ -24,6 +24,11 @@ export interface PluginDefinition extends PluginManifest {
    * (`'outpost.console?'`): it is set up first when enabled and ignored otherwise.
    */
   dependsOn?: readonly string[];
+  /**
+   * The games the plugin supports, e.g. `['minecraft-java']`; unset for a plugin that works with
+   * any game. Outpost shows its server tabs and serves its server routes only for these games.
+   */
+  games?: readonly string[];
   /** Migrations for the plugin's own tables, in order. They run before `setup`. */
   migrations?: readonly Migration[];
   /** Server permissions the plugin adds, with the built-in roles that have them. */
@@ -68,6 +73,17 @@ export function definePlugin<T extends PluginDefinition>(plugin: T): T {
     if (dependency.id === plugin.id) {
       throw new PluginDefinitionError(`Plugin "${plugin.id}" cannot depend on itself`);
     }
+  }
+  const games = plugin.games;
+  if (
+    games !== undefined &&
+    (games.length === 0 ||
+      new Set(games).size !== games.length ||
+      games.some((game) => !GAME_ID_PATTERN.test(game)))
+  ) {
+    throw new PluginDefinitionError(
+      `Plugin "${plugin.id}" has an invalid list of games: expected unique ids like "minecraft-java"`,
+    );
   }
   let previous = '';
   for (const migration of plugin.migrations ?? []) {

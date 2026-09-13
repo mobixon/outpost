@@ -24,8 +24,8 @@ export interface ServerInfo {
   id: string;
   slug: string;
   name: string;
-  /** Game module id, e.g. `minecraft-java`; null until the server is connected. */
-  game: string | null;
+  /** The game of the server, e.g. `minecraft-java`; chosen when the server was added. */
+  game: string;
   /** What the server supports with its connection and game module, e.g. `commands.send`. */
   capabilities: readonly string[];
 }
@@ -49,7 +49,8 @@ export interface ServerRouteRequest<S extends ServerRouteSchema> {
 /**
  * A route of one game server, mounted at
  * `/api/v1/servers/:serverId/plugins/<plugin id><url>`. Outpost answers 404 when the user cannot
- * see the server, 403 without the permission and 409 when the server lacks the capability.
+ * see the server, 403 without the permission, and 409 when the plugin does not support the game of
+ * the server or the server lacks the capability.
  */
 export interface ServerRouteDefinition<S extends ServerRouteSchema> {
   method: HttpMethod;

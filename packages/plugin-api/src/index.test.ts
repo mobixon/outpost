@@ -70,6 +70,24 @@ describe('definePlugin', () => {
   });
 });
 
+describe('definePlugin games', () => {
+  const valid = { id: 'outpost.players', version: '0.1.0', apiVersion: PLUGIN_API_VERSION };
+
+  it('accepts a list of game ids, also of games Outpost does not know', () => {
+    expect(definePlugin({ ...valid, games: ['minecraft-java', 'rust'] }).games).toEqual([
+      'minecraft-java',
+      'rust',
+    ]);
+  });
+
+  it.each([[[]], [['Minecraft']], [['rust', 'rust']], [['minecraft_java']]])(
+    'rejects games %j',
+    (games) => {
+      expect(() => definePlugin({ ...valid, games })).toThrow(/invalid list of games/);
+    },
+  );
+});
+
 describe('definePlugin permissions', () => {
   const valid = { id: 'outpost.players', version: '0.1.0', apiVersion: PLUGIN_API_VERSION };
 

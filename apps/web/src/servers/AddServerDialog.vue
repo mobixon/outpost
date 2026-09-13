@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { API_PREFIX, serverSummarySchema } from '@outpost/shared';
+import { API_PREFIX, GAME_IDS, serverSummarySchema } from '@outpost/shared';
 import {
   Alert,
   AlertDescription,
@@ -15,6 +15,11 @@ import {
   FieldGroup,
   FieldLabel,
   Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Spinner,
 } from '@outpost/ui';
 import { apiSend } from '@outpost/web-plugin-api';
@@ -29,7 +34,8 @@ const open = defineModel<boolean>('open', { required: true });
 const { t } = useI18n();
 const errorMessage = useErrorMessage();
 const router = useRouter();
-const form = reactive({ name: '', slug: '' });
+const blank = () => ({ name: '', slug: '', game: GAME_IDS[0] as string });
+const form = reactive(blank());
 // The short name follows the name until the user edits it.
 const slugEdited = ref(false);
 const error = ref<string>();
@@ -43,7 +49,7 @@ watch(
 );
 watch(open, (value) => {
   if (value) {
-    Object.assign(form, { name: '', slug: '' });
+    Object.assign(form, blank());
     slugEdited.value = false;
     error.value = undefined;
   }
@@ -57,7 +63,7 @@ async function submit(): Promise<void> {
     const server = await apiSend(
       'POST',
       `${API_PREFIX}/servers`,
-      { name: form.name, slug: form.slug },
+      { name: form.name, slug: form.slug, game: form.game },
       serverSummarySchema,
     );
     await loadServers();
@@ -80,6 +86,18 @@ async function submit(): Promise<void> {
           <DialogDescription>{{ t('servers.add.text') }}</DialogDescription>
         </DialogHeader>
         <FieldGroup>
+          <Field>
+            <FieldLabel for="server-game">{{ t('servers.add.game') }}</FieldLabel>
+            <Select v-model="form.game">
+              <SelectTrigger id="server-game" class="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="game in GAME_IDS" :key="game" :value="game">
+                  {{ t(`games.${game}`) }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <FieldDescription>{{ t('servers.add.gameHint') }}</FieldDescription>
+          </Field>
           <Field>
             <FieldLabel for="server-name">{{ t('servers.add.name') }}</FieldLabel>
             <Input id="server-name" v-model="form.name" maxlength="64" required />

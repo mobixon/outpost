@@ -69,7 +69,7 @@ describe.skipIf(server === undefined)('the Files connector over SFTP', { timeout
     const admin = await setUpAdmin(outpost);
     const created = await send(outpost, 'POST', '/api/v1/servers', {
       cookie: admin,
-      body: { name: 'Survival', slug: 'survival' },
+      body: { name: 'Survival', slug: 'survival', game: 'minecraft-java' },
     });
     const serverId = created.json<{ id: string }>().id;
     const owner = await createUserWithInvitation(outpost, admin, 'the-owner', {

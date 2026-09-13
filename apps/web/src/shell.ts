@@ -12,6 +12,8 @@ export interface ShellServerTab {
   icon: Component;
   permission: string;
   capability?: string;
+  /** The games the plugin supports; null for any game. */
+  games: readonly string[] | null;
   order: number;
 }
 
@@ -80,8 +82,11 @@ export function buildNavItems(
   return items.sort((a, b) => a.order - b.order);
 }
 
-/** Server tabs of the enabled plugins. */
-export function buildServerTabs(plugins: readonly WebPluginDefinition[]): ShellServerTab[] {
+/** Server tabs of the enabled plugins, with the games of their plugin as the server reports them. */
+export function buildServerTabs(
+  plugins: readonly WebPluginDefinition[],
+  games: ReadonlyMap<string, readonly string[] | null> = new Map(),
+): ShellServerTab[] {
   return plugins.flatMap((plugin) =>
     (plugin.serverTabs ?? []).map((tab) => ({
       id: `${plugin.id}.${tab.key}`,
@@ -90,6 +95,7 @@ export function buildServerTabs(plugins: readonly WebPluginDefinition[]): ShellS
       icon: tab.icon,
       permission: tab.permission,
       ...(tab.capability !== undefined && { capability: tab.capability }),
+      games: games.get(plugin.id) ?? null,
       order: tab.order ?? DEFAULT_ORDER,
     })),
   );

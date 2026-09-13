@@ -30,6 +30,8 @@ export function serverPluginApiPath(serverId: string, pluginId: string, path = '
 export const pluginInfoSchema = z.object({
   id: z.string(),
   version: z.string(),
+  /** The games the plugin supports; null when it works with any game. */
+  games: z.array(z.string()).nullable(),
 });
 export type PluginInfo = z.infer<typeof pluginInfoSchema>;
 

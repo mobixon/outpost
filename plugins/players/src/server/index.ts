@@ -48,6 +48,7 @@ export function createPlayersPlugin(options: PlayersPluginOptions = {}): PluginD
     id: PLAYERS_PLUGIN_ID,
     version: '0.1.0',
     apiVersion: PLUGIN_API_VERSION,
+    games: ['minecraft-java'],
     migrations,
     permissions: [
       { key: PlayersPermission.view, roles: ['owner', 'admin', 'moderator', 'viewer'] },
@@ -77,7 +78,7 @@ function setup(ctx: PluginContext, pollIntervalMs: number): void {
   if (pollIntervalMs > 0) {
     const pollAll = async () => {
       for (const server of await ctx.servers.list()) {
-        if (server.game !== 'minecraft-java' || !server.capabilities.includes(capability)) continue;
+        if (!ctx.servers.supports(server) || !server.capabilities.includes(capability)) continue;
         tracker.poll(server.id).catch((err: unknown) => {
           ctx.logger.debug('polling the players failed', {
             serverId: server.id,

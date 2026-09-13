@@ -36,7 +36,8 @@ export const serverSummarySchema = z.object({
   capabilities: z.array(z.string()),
   /** The connectors set up for the server; empty while it is not connected. */
   connectors: z.array(z.enum(CONNECTOR_TYPES)),
-  game: gameIdSchema.nullable(),
+  /** The game of the server, e.g. `minecraft-java`; chosen when it was added, never changed. */
+  game: z.string(),
   createdAt: z.string(),
 });
 export type ServerSummary = z.infer<typeof serverSummarySchema>;
@@ -48,6 +49,8 @@ export const serverListSchema = z.object({
 export const serverCreateSchema = z.object({
   name: serverNameSchema,
   slug: slugSchema,
+  /** The game of the server; it cannot be changed later. */
+  game: gameIdSchema,
 });
 
 export const serverUpdateSchema = z

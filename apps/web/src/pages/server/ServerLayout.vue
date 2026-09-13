@@ -22,6 +22,8 @@ interface Tab {
   icon: Component | LucideIcon;
   permission: string;
   capability?: string;
+  /** The games of the tab's plugin; null or unset for any game. */
+  games?: readonly string[] | null;
   order: number;
 }
 
@@ -56,7 +58,7 @@ const CORE_TABS: readonly Tab[] = [
   },
 ];
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 const errorMessage = useErrorMessage();
 const shell = useShell();
 const route = useRoute();
@@ -86,9 +88,12 @@ const tabs = computed(() => {
   if (current === null) return [];
   return [...CORE_TABS, ...shell.serverTabs]
     .filter(
+      // A module shows when it supports the game, the server can do what it needs and the
+      // user may use it.
       (tab) =>
-        current.permissions.includes(tab.permission) &&
-        (tab.capability === undefined || current.capabilities.includes(tab.capability)),
+        (tab.games == null || tab.games.includes(current.game)) &&
+        (tab.capability === undefined || current.capabilities.includes(tab.capability)) &&
+        current.permissions.includes(tab.permission),
     )
     .sort((a, b) => a.order - b.order);
 });
@@ -129,7 +134,10 @@ const tabPath = (key: string) =>
             {{ t(`connectors.${connector}`) }}
           </Badge>
         </div>
-        <span class="text-muted-foreground font-mono text-sm">{{ server.slug }}</span>
+        <span class="text-muted-foreground text-sm">
+          <span class="font-mono">{{ server.slug }}</span> ·
+          {{ te(`games.${server.game}`) ? t(`games.${server.game}`) : server.game }}
+        </span>
       </header>
 
       <nav :aria-label="t('servers.tabsLabel')" class="-mb-2 overflow-x-auto border-b">

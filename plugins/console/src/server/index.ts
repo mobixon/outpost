@@ -12,6 +12,8 @@ export default definePlugin({
   id: CONSOLE_PLUGIN_ID,
   version: '0.1.0',
   apiVersion: PLUGIN_API_VERSION,
+  // Chat uses tellraw and replies are rendered with § codes: Minecraft only for now.
+  games: ['minecraft-java'],
   permissions: [
     { key: ConsolePermission.execute, roles: ['owner', 'admin'] },
     { key: ConsolePermission.chat, roles: ['owner', 'admin', 'moderator'] },

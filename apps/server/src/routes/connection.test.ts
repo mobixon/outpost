@@ -38,7 +38,7 @@ async function setUp() {
   const admin = await setUpAdmin(server);
   const created = await send(server, 'POST', '/api/v1/servers', {
     cookie: admin,
-    body: { name: 'Survival', slug: 'survival' },
+    body: { name: 'Survival', slug: 'survival', game: 'minecraft-java' },
   });
   const serverId = created.json<{ id: string }>().id;
   const member = (username: string, role: string) =>
@@ -50,7 +50,6 @@ async function setUp() {
   ]);
   const connection = (port = rcon.port, secret: string | null = password) => ({
     type: 'rcon',
-    game: 'minecraft-java',
     host: '127.0.0.1',
     port,
     ...(secret !== null && { password: secret }),
@@ -76,7 +75,6 @@ describe('server connections', () => {
     expect(stored.json()).toEqual({
       connection: {
         type: 'rcon',
-        game: 'minecraft-java',
         host: '127.0.0.1',
         port: rcon.port,
         hasPassword: true,
