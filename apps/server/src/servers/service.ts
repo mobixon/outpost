@@ -3,6 +3,7 @@ import { HttpError, type ServerInfo } from '@outpost/plugin-api';
 import {
   Capability,
   CorePermission,
+  gameDefaults,
   type ConnectionInfo,
   type ConnectorType,
   type FilesInfo,
@@ -217,6 +218,10 @@ export class ServerService {
     const files = this.filesOf(server);
     if (files !== null) capabilities.push(Capability.filesRead);
     if (files?.writable === true) capabilities.push(Capability.filesWrite);
+    // The log of the server, for games that write one, comes through its files.
+    if (files !== null && gameDefaults(this.gameOf(server))?.logFile !== undefined) {
+      capabilities.push(Capability.logsStream);
+    }
     return capabilities;
   }
 

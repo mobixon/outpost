@@ -21,7 +21,8 @@ interface Tab {
   label: string;
   icon: Component | LucideIcon;
   permission: string;
-  capability?: string;
+  /** The server needs this capability, or one of these. */
+  capability?: string | readonly string[];
   /** The games of the tab's plugin; null or unset for any game. */
   games?: readonly string[] | null;
   order: number;
@@ -92,7 +93,10 @@ const tabs = computed(() => {
       // user may use it.
       (tab) =>
         (tab.games == null || tab.games.includes(current.game)) &&
-        (tab.capability === undefined || current.capabilities.includes(tab.capability)) &&
+        (tab.capability === undefined ||
+          (typeof tab.capability === 'string' ? [tab.capability] : tab.capability).some(
+            (capability) => current.capabilities.includes(capability),
+          )) &&
         current.permissions.includes(tab.permission),
     )
     .sort((a, b) => a.order - b.order);

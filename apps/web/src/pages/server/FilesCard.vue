@@ -69,7 +69,9 @@ const busy = ref<'load' | 'test' | 'save' | 'remove' | null>('load');
 const url = computed(() => `${API_PREFIX}/servers/${encodeURIComponent(server.value.id)}/files`);
 const connected = computed(() => server.value.connectors.includes('files'));
 const capabilities = computed(() =>
-  server.value.capabilities.filter((capability) => capability.startsWith('files.')),
+  server.value.capabilities.filter(
+    (capability) => capability.startsWith('files.') || capability.startsWith('logs.'),
+  ),
 );
 const isSftp = computed(() => form.source === 'sftp');
 /** The stored SFTP settings while host, port and username stay the same. */

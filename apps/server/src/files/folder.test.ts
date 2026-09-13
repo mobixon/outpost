@@ -126,6 +126,19 @@ describe('FolderFiles', () => {
   });
 });
 
+describe('FolderFiles.readRange', () => {
+  it('reads a part of a file, and less at its end', async () => {
+    await writeFile(path.join(root, 'survival', 'world', 'log.txt'), 'hello world');
+    const read = (offset: number, length: number) =>
+      files()
+        .readRange('world/log.txt', offset, length)
+        .then((bytes) => Buffer.from(bytes).toString());
+    expect(await read(6, 5)).toBe('world');
+    expect(await read(6, 100)).toBe('world');
+    expect(await read(20, 5)).toBe('');
+  });
+});
+
 describe('testFolder', () => {
   it('passes for a server folder that Outpost can write', async () => {
     const result = await testFolder(root, 'survival', true);

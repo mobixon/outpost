@@ -13,9 +13,10 @@ export default defineWebPlugin({
       label: 'console.tab',
       icon: TerminalIcon,
       component: () => import('./ConsoleTab.vue'),
-      // Moderators see the tab for the chat; the command line needs console.execute.
+      // Moderators see the tab for the chat and the log; the command line needs console.execute.
       permission: ConsolePermission.chat,
-      capability: 'commands.send',
+      // Commands over RCON, or only the live log from the files.
+      capability: ['commands.send', 'logs.stream'],
       order: 100,
     },
   ],

@@ -314,6 +314,7 @@ export default {
     },
     console: {
       execute: 'Run any console command',
+      read: 'See the live log of the server',
     },
     chat: {
       send: 'Send chat messages to the players',

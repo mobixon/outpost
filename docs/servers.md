@@ -24,10 +24,10 @@ A server is connected through **connectors**, which superadmins set up under **S
 connector is tested and saved on its own and adds **capabilities** to the server. Modules use the
 capabilities and do not care which connector provides them.
 
-| Connector | Capabilities                | Needs                                                                  |
-| --------- | --------------------------- | ---------------------------------------------------------------------- |
-| RCON      | `commands.send`             | the RCON port of the game server, reachable by Outpost                 |
-| Files     | `files.read`, `files.write` | the data folder of the game server: mounted into Outpost, or over SFTP |
+| Connector | Capabilities                               | Needs                                                                  |
+| --------- | ------------------------------------------ | ---------------------------------------------------------------------- |
+| RCON      | `commands.send`                            | the RCON port of the game server, reachable by Outpost                 |
+| Files     | `files.read`, `files.write`, `logs.stream` | the data folder of the game server: mounted into Outpost, or over SFTP |
 
 ### RCON
 
@@ -81,19 +81,30 @@ Writes go to a temporary file that replaces the target, atomically where the ser
 closed after a minute without use.
 
 Paths cannot leave the folder: absolute paths, `..` and symbolic links that lead outside are
-refused. No module of this version uses the files yet; the offline-mode whitelist, the live log from
-`logs/latest.log` and the settings editor will build on them.
+refused.
+
+For games that write a log (`logs/latest.log` for Minecraft), the Files connector also gives
+`logs.stream`: Outpost follows the log while somebody watches it — a mounted folder every second,
+SFTP every two seconds — keeps its last 1000 lines and starts over when the server begins a new
+log. The **Console** shows it live. The offline-mode whitelist and the settings editor will build
+on the files next.
 
 ### Who connects
 
 Only superadmins change connectors, because a connector points Outpost at a host or a folder of its
 environment. Once RCON is connected, **Overview** shows whether the server answers and who is online, and the
 **Console** tab runs commands (owners and admins) and sends chat messages (also moderators). Every
-command and message is written to the audit log.
+command and message is written to the audit log. With the Files connector the Console also shows
+the **live log** of the server, to owners, admins and moderators (`console.read`): viewers do not
+see it, because it contains the chat and the IP addresses of the players. The browser follows it
+over server-sent events and gets the lines it missed when it reconnects. The commands a user runs
+are kept in their **command history** for that server — the last 100, in the database, so it
+follows the user to every browser: the history button lists them (narrowed to what is typed) and
+puts the chosen one into the command line, and the arrow keys go through them.
 
 Limitations of the RCON connection:
 
-- the console shows the replies to commands, not the live server log;
+- without the Files connector the console shows the replies to commands, not the live server log;
 - on offline-mode servers, `whitelist add` for a player who has never joined stores the wrong
   (online) UUID, because Minecraft looks up unknown names at Mojang. Let such players join once with
   the whitelist off; a module on top of the Files connector will fix this.
@@ -221,6 +232,6 @@ before the handler runs. `games` lists the games a plugin supports (ids such as 
 also of games Outpost does not know yet); a plugin without `games` works with any game. Its tabs
 show only on servers of these games, and `ctx.servers.supports(server)` tells background jobs
 which servers are theirs. `ctx.commands.send(serverId, command)` runs a console command
-through the RCON connector (capability `commands.send`), `ctx.files` reads, writes, stats and lists the files of the server through the Files connector (`files.read`, `files.write`; paths relative to the server's folder), `ctx.permissions.has()` checks a permission elsewhere (for example for live updates), and `ctx.secrets` encrypts secrets the plugin
+through the RCON connector (capability `commands.send`), `ctx.files` reads, writes, stats and lists the files of the server through the Files connector (`files.read`, `files.write`; paths relative to the server's folder), `ctx.logs` gives the recent lines of the server log and the new ones as they are written (`logs.stream`), `ctx.http.serverEvents` streams server-sent events to the browser with the same checks as a server route, `ctx.permissions.has()` checks a permission elsewhere (for example for live updates), and `ctx.secrets` encrypts secrets the plugin
 stores. The web part of a plugin adds a tab to the server page with `serverTabs`, shown to users
 with the tab's permission.

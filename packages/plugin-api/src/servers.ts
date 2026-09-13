@@ -65,3 +65,34 @@ export interface ServerRouteDefinition<S extends ServerRouteSchema> {
   schema?: S;
   handler(request: ServerRouteRequest<S>): RouteResponse<S> | Promise<RouteResponse<S>>;
 }
+
+/** One server-sent event; `data` is sent as JSON. */
+export interface ServerEvent {
+  event?: string;
+  /** The browser sends it back as `Last-Event-ID` when it reconnects. */
+  id?: string;
+  data: unknown;
+}
+
+export interface ServerEventStreamRequest {
+  server: ServerInfo;
+  user: AuthenticatedUser;
+  permissions: ReadonlySet<string>;
+  /** The id of the last event the browser received, when it reconnects. */
+  lastEventId: string | undefined;
+  send(event: ServerEvent): void;
+}
+
+/**
+ * A stream of server-sent events of one game server (`GET` at the URL of a server route, with the
+ * same checks). Outpost keeps the connection alive and ends it after a while, so that the browser
+ * reconnects (with `Last-Event-ID`) and its access is checked again.
+ */
+export interface ServerEventStreamDefinition {
+  /** Path below the plugin's base URL of the server, starting with `/`. */
+  url: string;
+  permission: string;
+  capability?: string;
+  /** Starts sending; returns a function that stops when the connection ends. */
+  open(request: ServerEventStreamRequest): (() => void) | Promise<() => void>;
+}

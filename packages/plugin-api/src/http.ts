@@ -1,5 +1,9 @@
 import type { z } from 'zod';
-import type { ServerRouteDefinition, ServerRouteSchema } from './servers.js';
+import type {
+  ServerEventStreamDefinition,
+  ServerRouteDefinition,
+  ServerRouteSchema,
+} from './servers.js';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -56,6 +60,8 @@ export interface HttpRegistry {
   route<S extends RouteSchema, A extends RouteAccess = 'user'>(route: RouteDefinition<S, A>): void;
   /** A route of one game server, with permission and capability checks. */
   serverRoute<S extends ServerRouteSchema>(route: ServerRouteDefinition<S>): void;
+  /** A stream of server-sent events of one game server, with the same checks. */
+  serverEvents(stream: ServerEventStreamDefinition): void;
 }
 
 /** Throw from a route handler to answer with a specific status code and error code. */

@@ -3,6 +3,7 @@ import type { Stats } from 'node:fs';
 import {
   chmod,
   lstat,
+  open,
   readdir,
   readFile,
   realpath,
@@ -184,6 +185,21 @@ export class FolderFiles {
         if (info !== undefined) entries.push({ name: entry, ...toStat(info) });
       }
       return entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    });
+  }
+
+  /** Up to `length` bytes of a file from `offset`; fewer at its end. */
+  readRange(relative: string, offset: number, length: number): Promise<Buffer> {
+    return guard(async () => {
+      const target = await this.#resolve(relative);
+      const handle = await open(target, 'r');
+      try {
+        const buffer = Buffer.alloc(Math.min(length, MAX_FILE_BYTES));
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset);
+        return buffer.subarray(0, bytesRead);
+      } finally {
+        await handle.close();
+      }
     });
   }
 }

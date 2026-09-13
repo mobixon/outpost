@@ -14,6 +14,7 @@ import { z } from 'zod';
 import type { AuthService } from '../auth/service.js';
 import { testFolder } from '../files/folder.js';
 import { testSftp, type SftpSessions, type SftpTarget } from '../files/sftp.js';
+import type { LogHub } from '../logs/hub.js';
 import type { ServerRow, ServerService } from '../servers/service.js';
 
 /** What the audit log keeps of the Files connector: no passwords or keys. */
@@ -45,6 +46,7 @@ export function registerFilesRoutes(
   servers: ServerService,
   root: string,
   sessions: SftpSessions,
+  logs: LogHub,
 ): void {
   const app = fastify.withTypeProvider<ZodTypeProvider>();
   const tags = ['servers'];
@@ -88,6 +90,7 @@ export function registerFilesRoutes(
     }
     await servers.saveFiles(server.id, input, sftp);
     sessions.reset(server.id);
+    logs.reset(server.id);
     await auth.audit.record({
       action: 'server.files_updated',
       userId: ctx.user.id,
@@ -104,6 +107,7 @@ export function registerFilesRoutes(
     });
     await servers.removeFiles(server.id);
     sessions.reset(server.id);
+    logs.reset(server.id);
     await auth.audit.record({
       action: 'server.files_removed',
       userId: ctx.user.id,

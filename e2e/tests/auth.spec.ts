@@ -161,7 +161,7 @@ test('connect the server and see why RCON and the files do not answer', async ({
   await expect(page.getByTestId('server-reachable')).toContainText('The server does not answer');
 
   await page.getByRole('link', { name: 'Console' }).click();
-  await page.getByLabel('Command').fill('list');
+  await page.getByLabel('Command', { exact: true }).fill('list');
   await page.getByRole('button', { name: 'Run' }).click();
   await expect(page.getByTestId('console-output')).toContainText(
     'The host name cannot be resolved.',

@@ -15,8 +15,8 @@ export interface ServerTab {
   component: RouteRecordSingleView['component'];
   /** Permission the user needs on the server to see the tab. */
   permission: string;
-  /** Capability the server must have, e.g. `logs.stream`. */
-  capability?: string;
+  /** Capability the server must have, e.g. `logs.stream`, or a list of which it needs one. */
+  capability?: string | readonly string[];
   /** Position among the tabs; lower comes first. Defaults to 500. */
   order?: number;
 }

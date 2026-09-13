@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { SendIcon, TerminalIcon, Trash2Icon } from '@lucide/vue';
+import { HistoryIcon, SendIcon, TerminalIcon, Trash2Icon } from '@lucide/vue';
 import { serverPluginApiPath } from '@outpost/shared';
 import {
   Alert,
@@ -7,38 +7,75 @@ import {
   Button,
   Card,
   CardContent,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
   Field,
   FieldDescription,
   FieldLabel,
   Input,
   Spinner,
 } from '@outpost/ui';
-import { ApiError, apiSend, useServerContext } from '@outpost/web-plugin-api';
-import { computed, nextTick, ref, watch } from 'vue';
+import { ApiError, apiFetch, apiSend, useServerContext } from '@outpost/web-plugin-api';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { CONSOLE_PLUGIN_ID, commandResultSchema, ConsolePermission } from '../shared.js';
+import {
+  CONSOLE_PLUGIN_ID,
+  commandResultSchema,
+  ConsolePermission,
+  historySchema,
+  logLinesSchema,
+  type HistoryEntry,
+} from '../shared.js';
 import { complete } from './commands.js';
 import { parseFormatting } from './formatting.js';
+import { logLevel, type LogLevel } from './log.js';
 
 interface Entry {
   id: number;
-  kind: 'command' | 'reply' | 'chat' | 'error';
+  kind: 'command' | 'reply' | 'chat' | 'error' | 'log';
   text: string;
+  level?: LogLevel;
 }
 
-const MAX_ENTRIES = 300;
-const MAX_HISTORY = 100;
+type LiveState = 'connecting' | 'live' | 'reconnecting' | 'closed';
+
+const MAX_ENTRIES = 1000;
+/** Commands shown in the history menu. */
+const MAX_HISTORY_SHOWN = 50;
+const LEVEL_CLASS: Record<LogLevel, string> = {
+  error: 'text-red-300',
+  warn: 'text-amber-200',
+  info: 'text-zinc-300',
+};
 
 const { t, te } = useI18n();
 const { server } = useServerContext();
-const canExecute = computed(() => server.value.permissions.includes(ConsolePermission.execute));
-const canChat = computed(() => server.value.permissions.includes(ConsolePermission.chat));
+// Commands and chat go over RCON; the live log comes from the files.
+const hasRcon = computed(() => server.value.capabilities.includes('commands.send'));
+const canExecute = computed(
+  () => hasRcon.value && server.value.permissions.includes(ConsolePermission.execute),
+);
+const canChat = computed(
+  () => hasRcon.value && server.value.permissions.includes(ConsolePermission.chat),
+);
+// The live log needs the files of the server (logs.stream) and the right to read it.
+const live = computed(
+  () =>
+    server.value.capabilities.includes('logs.stream') &&
+    server.value.permissions.includes(ConsolePermission.read),
+);
+const liveState = ref<LiveState>('connecting');
 
-// The transcript lives for the browser tab; the command history is kept per server.
+// The commands and replies live for the browser tab; the log comes from the server again, and
+// the command history is kept in the account of the user.
 const transcriptKey = computed(() => `outpost.console.${server.value.id}`);
-const historyKey = computed(() => `outpost.console.history.${server.value.id}`);
 const entries = ref<Entry[]>(load<Entry[]>(sessionStorage, transcriptKey.value) ?? []);
-const history = ref<string[]>(load<string[]>(localStorage, historyKey.value) ?? []);
+const history = ref<HistoryEntry[]>([]);
 let historyIndex = -1;
 const command = ref('');
 const matches = ref<string[]>([]);
@@ -63,14 +100,31 @@ function store(storage: Storage, key: string, value: unknown): void {
   }
 }
 
-watch(entries, (value) => store(sessionStorage, transcriptKey.value, value), { deep: true });
+watch(entries, (value) =>
+  store(
+    sessionStorage,
+    transcriptKey.value,
+    value.filter((entry) => entry.kind !== 'log'),
+  ),
+);
+
+/** Whether the view follows new output: not while the user has scrolled up to read. */
+function following(): boolean {
+  const element = output.value;
+  return (
+    element === undefined || element.scrollHeight - element.scrollTop - element.clientHeight < 40
+  );
+}
 
 let nextId = Math.max(0, ...entries.value.map((entry) => entry.id)) + 1;
-async function add(kind: Entry['kind'], text: string): Promise<void> {
-  entries.value = [...entries.value, { id: nextId++, kind, text }].slice(-MAX_ENTRIES);
+async function append(items: Omit<Entry, 'id'>[], scroll = following()): Promise<void> {
+  entries.value = [...entries.value, ...items.map((item) => ({ ...item, id: nextId++ }))].slice(
+    -MAX_ENTRIES,
+  );
   await nextTick();
-  output.value?.scrollTo({ top: output.value.scrollHeight });
+  if (scroll) output.value?.scrollTo({ top: output.value.scrollHeight });
 }
+const add = (kind: Entry['kind'], text: string) => append([{ kind, text }], true);
 
 function describeError(err: unknown): string {
   if (err instanceof ApiError) {
@@ -82,13 +136,81 @@ function describeError(err: unknown): string {
 
 const path = (url: string) => serverPluginApiPath(server.value.id, CONSOLE_PLUGIN_ID, url);
 
+// The browser reconnects by itself and gets only the lines it missed (Last-Event-ID).
+let source: EventSource | undefined;
+function follow(): void {
+  source = new EventSource(path('/log'));
+  source.addEventListener('lines', (event) => {
+    let data: unknown;
+    try {
+      data = JSON.parse((event as MessageEvent<string>).data);
+    } catch {
+      return;
+    }
+    const lines = logLinesSchema.safeParse(data);
+    if (!lines.success) return;
+    void append(
+      lines.data.map((line) => ({ kind: 'log', text: line.text, level: logLevel(line.text) })),
+    );
+  });
+  source.addEventListener('ready', () => {
+    liveState.value = 'live';
+  });
+  source.addEventListener('open', () => {
+    if (liveState.value === 'reconnecting') liveState.value = 'live';
+  });
+  source.addEventListener('error', () => {
+    liveState.value = source?.readyState === EventSource.CLOSED ? 'closed' : 'reconnecting';
+  });
+}
+
+async function loadHistory(): Promise<void> {
+  if (!canExecute.value) return;
+  try {
+    history.value = (await apiFetch(path('/history'), historySchema)).commands;
+  } catch {
+    // Without the history the command line still works.
+  }
+}
+
+onMounted(() => {
+  if (live.value) follow();
+  void loadHistory();
+});
+onBeforeUnmount(() => source?.close());
+
+/** The history, narrowed to the commands that contain what is typed. */
+const historyShown = computed(() => {
+  const typed = command.value.trim().toLowerCase();
+  const found =
+    typed === ''
+      ? history.value
+      : history.value.filter((entry) => entry.command.toLowerCase().includes(typed));
+  return found.slice(0, MAX_HISTORY_SHOWN);
+});
+
+const focusCommand = () => document.getElementById('console-command')?.focus();
+
+function pick(entry: HistoryEntry): void {
+  command.value = entry.command;
+  matches.value = [];
+  historyIndex = -1;
+}
+
+async function clearHistory(): Promise<void> {
+  try {
+    await apiSend('DELETE', path('/history'));
+    history.value = [];
+  } catch (err) {
+    await add('error', describeError(err));
+  }
+}
+
 async function run(): Promise<void> {
   const text = command.value.trim();
   if (text === '' || busy.value) return;
   busy.value = true;
   matches.value = [];
-  history.value = [text, ...history.value.filter((entry) => entry !== text)].slice(0, MAX_HISTORY);
-  store(localStorage, historyKey.value, history.value);
   historyIndex = -1;
   command.value = '';
   await add('command', text);
@@ -104,6 +226,7 @@ async function run(): Promise<void> {
     await add('error', describeError(err));
   } finally {
     busy.value = false;
+    void loadHistory();
   }
 }
 
@@ -135,7 +258,7 @@ function onKey(event: KeyboardEvent): void {
       event.key === 'ArrowUp'
         ? Math.min(historyIndex + 1, history.value.length - 1)
         : Math.max(historyIndex - 1, -1);
-    command.value = historyIndex === -1 ? '' : (history.value[historyIndex] ?? '');
+    command.value = historyIndex === -1 ? '' : (history.value[historyIndex]?.command ?? '');
   }
 }
 
@@ -146,26 +269,46 @@ const clear = () => {
 
 <template>
   <div class="flex flex-col gap-4">
+    <p
+      v-if="live"
+      class="text-muted-foreground flex items-center gap-2 text-sm"
+      data-testid="console-live"
+    >
+      <span
+        class="size-2 shrink-0 rounded-full"
+        :class="
+          liveState === 'live'
+            ? 'bg-emerald-500'
+            : liveState === 'closed'
+              ? 'bg-destructive'
+              : 'animate-pulse bg-amber-500'
+        "
+        aria-hidden="true"
+      />
+      {{ t(`console.liveState.${liveState}`) }}
+    </p>
+
     <Card class="py-0">
       <CardContent class="p-0">
         <div
           ref="output"
-          class="h-[26rem] overflow-auto rounded-xl bg-zinc-950 p-4 font-mono text-sm text-zinc-100"
+          class="overflow-auto rounded-xl bg-zinc-950 p-4 font-mono text-sm text-zinc-100"
+          :class="live ? 'h-[32rem]' : 'h-[26rem]'"
           role="log"
           :aria-label="t('console.output')"
           data-testid="console-output"
         >
           <p v-if="entries.length === 0" class="flex items-start gap-2 text-zinc-400">
             <TerminalIcon class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            {{ t('console.empty') }}
+            {{ live ? t('console.emptyLive') : t('console.empty') }}
           </p>
-          <div v-for="entry in entries" :key="entry.id" class="whitespace-pre-wrap break-words">
+          <div v-for="entry in entries" :key="entry.id" class="break-words whitespace-pre-wrap">
             <span v-if="entry.kind === 'command'" class="text-sky-300">&gt; {{ entry.text }}</span>
             <span v-else-if="entry.kind === 'chat'" class="text-zinc-400"
               >[Web] {{ entry.text }}</span
             >
             <span v-else-if="entry.kind === 'error'" class="text-red-400">{{ entry.text }}</span>
-            <template v-else>
+            <span v-else :class="entry.kind === 'log' ? LEVEL_CLASS[entry.level ?? 'info'] : ''">
               <span
                 v-for="(segment, index) in parseFormatting(entry.text)"
                 :key="index"
@@ -178,7 +321,7 @@ const clear = () => {
                 }"
                 >{{ segment.text }}</span
               >
-            </template>
+            </span>
           </div>
         </div>
       </CardContent>
@@ -197,6 +340,59 @@ const clear = () => {
             placeholder="list"
             @keydown="onKey"
           />
+          <DropdownMenu @update:open="(open: boolean) => open && loadHistory()">
+            <DropdownMenuTrigger as-child>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                :aria-label="t('console.history')"
+                :title="t('console.history')"
+                data-testid="console-history"
+              >
+                <HistoryIcon />
+              </Button>
+            </DropdownMenuTrigger>
+            <!-- The chosen command goes into the command line, ready to run or to change. -->
+            <DropdownMenuContent
+              align="end"
+              class="max-h-80 w-80 overflow-y-auto"
+              @close-auto-focus="
+                (event: Event) => {
+                  event.preventDefault();
+                  focusCommand();
+                }
+              "
+            >
+              <DropdownMenuLabel>{{ t('console.history') }}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <p v-if="history.length === 0" class="text-muted-foreground px-2 py-1.5 text-sm">
+                {{ t('console.historyEmpty') }}
+              </p>
+              <p
+                v-else-if="historyShown.length === 0"
+                class="text-muted-foreground px-2 py-1.5 text-sm"
+              >
+                {{ t('console.historyNoMatch') }}
+              </p>
+              <DropdownMenuItem
+                v-for="entry in historyShown"
+                :key="entry.id"
+                class="font-mono"
+                @select="pick(entry)"
+              >
+                <span class="truncate">{{ entry.command }}</span>
+                <DropdownMenuShortcut v-if="entry.uses > 1">×{{ entry.uses }}</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <template v-if="history.length > 0">
+                <DropdownMenuSeparator />
+                <DropdownMenuItem class="text-destructive" @select="clearHistory">
+                  <Trash2Icon />
+                  {{ t('console.historyClear') }}
+                </DropdownMenuItem>
+              </template>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button type="submit" :disabled="busy || command.trim() === ''">
             <Spinner v-if="busy" />
             {{ t('console.run') }}
@@ -238,7 +434,7 @@ const clear = () => {
       </div>
     </form>
 
-    <Alert v-if="!canExecute && !canChat">
+    <Alert v-if="!canExecute && !canChat && !live">
       <AlertDescription>{{ t('servers.noAccess') }}</AlertDescription>
     </Alert>
   </div>
