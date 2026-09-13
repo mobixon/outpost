@@ -155,4 +155,16 @@ describe('the live log of the console', { timeout: 20_000 }, () => {
       (await get(server, `/api/v1/servers/${serverId}/plugins/outpost.console/log`, admin)).json(),
     ).toMatchObject({ error: { code: 'capability_missing' } });
   });
+
+  it('shares the general rate limit', async () => {
+    const { server, admin, serverId } = await setUp(false);
+    const hit = () => get(server, `/api/v1/servers/${serverId}/plugins/outpost.console/log`, admin);
+    const first = await hit();
+    expect(first.headers['x-ratelimit-limit']).toBe('600');
+    const remaining = Number(first.headers['x-ratelimit-remaining']);
+    for (let i = 0; i < remaining; i++) await hit();
+    const limited = await hit();
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json()).toMatchObject({ error: { code: 'rate_limited' } });
+  });
 });
