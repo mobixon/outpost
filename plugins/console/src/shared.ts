@@ -47,15 +47,12 @@ export const historyRemovedSchema = z.object({
 });
 
 /**
- * The `tellraw` command that shows a chat message from the panel to all players. The text is
+ * The `tellraw` command that shows a chat message from the panel to all players, as `[Server]`
+ * like a message from the server console; the audit log records who sent it. The text is
  * JSON-encoded, so nothing in it can change the command.
  */
-export function chatCommand(username: string, message: string): string {
+export function chatCommand(message: string): string {
   const text = message.replace(/[\r\n]+/g, ' ');
-  const components = [
-    { text: '[Web] ', color: 'gray' },
-    { text: `${username}: `, color: 'aqua' },
-    { text },
-  ];
+  const components = [{ text: '[Server] ', color: 'gray' }, { text }];
   return `tellraw @a ${JSON.stringify(components)}`;
 }

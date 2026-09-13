@@ -170,8 +170,7 @@ describe('console', () => {
     expect(chat.statusCode).toBe(200);
     const tellraw = rcon.commands.find((command) => command.startsWith('tellraw'));
     expect(JSON.parse(tellraw?.slice('tellraw @a '.length) ?? '[]')).toEqual([
-      { text: '[Web] ', color: 'gray' },
-      { text: 'the-moderator: ', color: 'aqua' },
+      { text: '[Server] ', color: 'gray' },
       { text: 'hello "all"' },
     ]);
     expect(

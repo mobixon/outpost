@@ -352,10 +352,12 @@ Offline-mode UUID rules and pending actions get **integration tests against a re
   On connect the client gets the buffer, then live lines. Reconnects follow Swarm task restarts.
 - Rendering: virtualized list; ANSI and `§` color codes rendered as styled spans; level coloring;
   filter (text/level/chat only); pause autoscroll; copy.
-- Input: command line with history (per user, local) and completion for vanilla commands + online
-  player names. Commands go through RCON; the RCON reply is shown inline, marked as RCON output.
-- Chat from the panel: `tellraw @a` with a `[Web] <user>:` prefix (permission `chat.send`,
-  separate from arbitrary `console.execute`).
+- Input: command line with history (per user and server, in the database) and completion for
+  vanilla commands + online player names. Commands go through RCON; the RCON reply is shown
+  inline, marked as RCON output.
+- Chat from the panel: `tellraw @a` with a `[Server]` prefix and no user name, like a message from
+  the server console; the audit log records who sent it (permission `chat.send`, separate from
+  arbitrary `console.execute`).
 - Every command is written to the audit log.
 
 ### 6.5 RCON client (`channel-rcon`)
