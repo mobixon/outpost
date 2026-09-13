@@ -9,6 +9,8 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /** Extra data of some errors, e.g. the failed test of a connector. */
+    readonly details?: unknown,
   ) {
     super(message);
   }
@@ -38,7 +40,12 @@ async function call(method: 'GET' | SendMethod, path: string, body?: unknown): P
   if (!response.ok) {
     const parsed = apiErrorSchema.safeParse(data);
     const error = parsed.success
-      ? new ApiError(response.status, parsed.data.error.code, parsed.data.error.message)
+      ? new ApiError(
+          response.status,
+          parsed.data.error.code,
+          parsed.data.error.message,
+          parsed.data.error.details,
+        )
       : new ApiError(response.status, 'http_error', `HTTP ${response.status}`);
     if (error.code === 'unauthenticated') unauthenticatedHandler?.();
     throw error;

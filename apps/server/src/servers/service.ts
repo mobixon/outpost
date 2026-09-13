@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { HttpError, type ServerInfo } from '@outpost/plugin-api';
 import {
+  Capability,
+  CorePermission,
   gameIdSchema,
   type ConnectionInfo,
+  type ConnectorType,
+  type FilesInfo,
+  type FilesInput,
   type GameId,
   type RoleKey,
   type ServerSummary,
@@ -14,6 +19,7 @@ import { SecretBox } from '../auth/crypto.js';
 import type { AuthContext, AuthService } from '../auth/service.js';
 import type { UserRow } from '../auth/users.js';
 import type { CoreTables, ServersTable } from '../db/schema.js';
+import type { FilesSettings } from '../files/access.js';
 import type { PermissionRegistry } from '../rbac/permissions.js';
 
 export type ServerRow = Selectable<ServersTable>;
@@ -26,6 +32,14 @@ const storedConnectionSchema = z.object({
   password: z.string(),
 });
 export type StoredConnection = z.infer<typeof storedConnectionSchema>;
+
+const storedFilesSchema = z.object({
+  source: z.literal('folder'),
+  /** Relative to OUTPOST_FILES_ROOT. */
+  path: z.string(),
+  writable: z.boolean(),
+});
+type StoredFiles = z.infer<typeof storedFilesSchema>;
 
 export interface RconSettings {
   host: string;
@@ -44,6 +58,16 @@ export interface ServerAccess {
 }
 
 type AccessUser = Pick<UserRow, 'id' | 'is_superadmin'>;
+
+/** Parses a JSON column; null when it is empty or cannot be read. */
+function parseColumn<T>(value: string | null, schema: z.ZodType<T>): T | null {
+  if (value === null) return null;
+  try {
+    return schema.parse(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Game servers and who may do what on them. Members see their servers with the permissions of
@@ -128,23 +152,53 @@ export class ServerService {
     return { ...access, ctx };
   }
 
-  /** The stored connection; null when there is none or it cannot be read. */
-  connectionOf(server: ServerRow): StoredConnection | null {
-    if (server.connection === null) return null;
-    try {
-      return storedConnectionSchema.parse(JSON.parse(server.connection));
-    } catch {
-      return null;
+  /**
+   * The server of a request that changes its connectors. Only superadmins change connectors: a
+   * connector points Outpost at a host or folder of its own environment, which should not be up to
+   * the members of a server.
+   */
+  async requireConnectorAdmin(
+    request: FastifyRequest,
+    serverId: string,
+    options: { sudo?: boolean } = {},
+  ): Promise<ServerAccess & { ctx: AuthContext }> {
+    const access = await this.require(request, serverId, CorePermission.manage);
+    if (access.actor !== 'superadmin') {
+      throw new HttpError(403, 'forbidden', 'Only superadmins can change the connectors');
     }
+    if (options.sudo) this.auth.assertSudo(access.ctx);
+    return access;
+  }
+
+  /** The stored RCON connector; null when there is none or it cannot be read. */
+  connectionOf(server: ServerRow): StoredConnection | null {
+    return parseColumn(server.connection, storedConnectionSchema);
+  }
+
+  /** The stored Files connector; null when there is none or it cannot be read. */
+  filesOf(server: ServerRow): StoredFiles | null {
+    return parseColumn(server.files, storedFilesSchema);
   }
 
   gameOf(server: ServerRow): GameId | null {
     return gameIdSchema.safeParse(server.game).data ?? null;
   }
 
-  /** What the server supports with its connection: an RCON connection sends commands. */
+  connectors(server: ServerRow): ConnectorType[] {
+    const connectors: ConnectorType[] = [];
+    if (this.connectionOf(server) !== null) connectors.push('rcon');
+    if (this.filesOf(server) !== null) connectors.push('files');
+    return connectors;
+  }
+
+  /** What the server supports: the union of what its connectors add. */
   capabilities(server: ServerRow): string[] {
-    return this.connectionOf(server)?.type === 'rcon' ? ['commands.send'] : [];
+    const capabilities: string[] = [];
+    if (this.connectionOf(server) !== null) capabilities.push(Capability.commandsSend);
+    const files = this.filesOf(server);
+    if (files !== null) capabilities.push(Capability.filesRead);
+    if (files?.writable === true) capabilities.push(Capability.filesWrite);
+    return capabilities;
   }
 
   connectionInfo(server: ServerRow): ConnectionInfo | null {
@@ -210,6 +264,34 @@ export class ServerService {
     };
   }
 
+  filesInfo(server: ServerRow): FilesInfo | null {
+    return this.filesOf(server);
+  }
+
+  async saveFiles(id: string, input: FilesInput): Promise<void> {
+    const files: StoredFiles = { source: input.source, path: input.path, writable: input.writable };
+    await this.db
+      .updateTable('servers')
+      .set({ files: JSON.stringify(files), updated_at: Date.now() })
+      .where('id', '=', id)
+      .execute();
+  }
+
+  async removeFiles(id: string): Promise<void> {
+    await this.db
+      .updateTable('servers')
+      .set({ files: null, updated_at: Date.now() })
+      .where('id', '=', id)
+      .execute();
+  }
+
+  /** The folder of the server for `ctx.files`; undefined without a Files connector. */
+  async filesSettings(serverId: string): Promise<FilesSettings | undefined> {
+    const server = await this.find(serverId);
+    const files = server === undefined ? null : this.filesOf(server);
+    return files === null ? undefined : { path: files.path, writable: files.writable };
+  }
+
   info(server: ServerRow): ServerInfo {
     return {
       id: server.id,
@@ -221,7 +303,6 @@ export class ServerService {
   }
 
   summary({ server, role, permissions }: ServerAccess): ServerSummary {
-    const connection = this.connectionOf(server);
     return {
       id: server.id,
       slug: server.slug,
@@ -229,8 +310,7 @@ export class ServerService {
       role,
       permissions: [...permissions].sort(),
       capabilities: this.capabilities(server),
-      connected: connection !== null,
-      connectionType: connection?.type ?? null,
+      connectors: this.connectors(server),
       game: this.gameOf(server),
       createdAt: new Date(server.created_at).toISOString(),
     };
@@ -250,6 +330,7 @@ export class ServerService {
       name: input.name,
       game: null,
       connection: null,
+      files: null,
       created_at: now,
       updated_at: now,
     };

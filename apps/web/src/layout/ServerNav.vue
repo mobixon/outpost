@@ -20,8 +20,12 @@ const { t } = useI18n();
         >
           <span
             class="size-2 shrink-0 rounded-full"
-            :class="server.connected ? 'bg-primary' : 'bg-muted-foreground/40'"
-            :title="server.connected ? 'RCON' : t('home.notConnected')"
+            :class="server.connectors.length > 0 ? 'bg-primary' : 'bg-muted-foreground/40'"
+            :title="
+              server.connectors.length > 0
+                ? server.connectors.map((connector) => t(`connectors.${connector}`)).join(', ')
+                : t('home.notConnected')
+            "
             aria-hidden="true"
           />
           <span class="truncate">{{ server.name }}</span>

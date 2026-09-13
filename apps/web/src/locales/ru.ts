@@ -28,6 +28,10 @@ export default {
     en: 'English',
     ru: 'Русский',
   },
+  connectors: {
+    rcon: 'RCON',
+    files: 'Файлы',
+  },
   auth: {
     setupTitle: 'Настройка Outpost',
     setupText:
@@ -252,6 +256,23 @@ export default {
     protocol_error: 'Сервер ответил неожиданно. Это точно порт RCON?',
     command_too_long: 'Команда слишком длинная для RCON.',
     rcon_password_required: 'Введите пароль RCON.',
+    files_root_missing:
+      'Корневой папки для файлов нет в контейнере Outpost: примонтируйте туда папки игровых серверов.',
+    folder_not_found: 'Папки нет: примонтирована ли папка данных игрового сервера в Outpost?',
+    folder_outside_root: 'Папка ведёт за пределы корневой папки для файлов.',
+    not_a_directory: 'Это не папка.',
+    not_a_file: 'Это не файл.',
+    properties_not_found:
+      'В папке нет server.properties: это точно папка данных сервера Minecraft?',
+    owner_mismatch:
+      'Outpost работает от другого пользователя (UID), чем владелец файлов, и при записи сменил бы их владельца. Запустите Outpost с UID игрового сервера или оставьте запись выключенной.',
+    files_permission_denied: 'У Outpost нет доступа к этим файлам.',
+    files_read_only: 'Папка примонтирована только для чтения.',
+    files_test_failed: 'Папка не прошла проверку.',
+    file_not_found: 'Такого файла нет.',
+    file_too_large: 'Файл слишком большой.',
+    invalid_path: 'Неверный путь.',
+    path_outside_folder: 'Путь ведёт за пределы папки сервера.',
   },
   home: {
     title: 'Игровые серверы',
@@ -307,14 +328,8 @@ export default {
       submit: 'Добавить сервер',
     },
     connection: {
-      title: 'Подключение',
-      text: 'Как Outpost подключается к серверу. Менять его могут только суперадмины.',
-      type: 'Тип подключения',
-      rcon: 'RCON',
-      rconText: 'Команды консоли, чат и игроки через RCON-порт сервера.',
-      full: 'Полное',
-      fullText: 'Добавит живой лог сервера, статус и доступ к файлам через Docker.',
-      later: 'Появится позже',
+      title: 'RCON',
+      text: 'Команды консоли, чат и игроки через RCON-порт сервера. Коннекторы сервера меняют только суперадмины.',
       game: 'Игра',
       host: 'Хост',
       hostHint:
@@ -334,6 +349,29 @@ export default {
         command: 'Команда list',
       },
     },
+    files: {
+      title: 'Файлы',
+      text: 'Даёт модулям доступ к файлам сервера, например к server.properties и вайтлисту. Коннекторы сервера меняют только суперадмины.',
+      source: 'Источник',
+      folder: 'Папка, примонтированная в Outpost',
+      sftp: 'SFTP',
+      later: 'появится позже',
+      path: 'Папка',
+      pathHint:
+        'Папка данных игрового сервера, примонтированная в контейнер Outpost внутрь {root}. Docker Compose: volume игрового сервера в {root}/<имя>. CapRover: постоянная папка с тем же путём на хосте, что у игрового сервера.',
+      writable: 'Разрешить запись',
+      writableHint:
+        'Модули смогут менять файлы. Outpost должен работать от владельца файлов (UID); у itzg/minecraft-server и Outpost это UID 1000.',
+      test: 'Проверить',
+      save: 'Сохранить',
+      saved: 'Доступ к файлам сохранён.',
+      remove: 'Отключить',
+      steps: {
+        folder: 'Поиск папки',
+        properties: 'Чтение server.properties',
+        write: 'Запись тестового файла',
+      },
+    },
     notFoundTitle: 'Сервер не найден',
     notFoundText: 'Такого сервера нет, или вы не его участник.',
     noAccess: 'У вас нет доступа к этой странице.',
@@ -351,6 +389,7 @@ export default {
       notConnectedAdmin:
         'Сервер ещё не подключён. Подключите его по RCON, чтобы отправлять команды.',
       connect: 'Подключить',
+      noRcon: 'Подключите RCON, чтобы видеть, отвечает ли сервер и кто онлайн.',
       refresh: 'Проверить снова',
       online: 'Сервер отвечает',
       offline: 'Сервер не отвечает',

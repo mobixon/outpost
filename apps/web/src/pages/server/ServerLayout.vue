@@ -122,8 +122,12 @@ const tabPath = (key: string) =>
           <Badge variant="secondary">
             {{ server.role ? t(`roles.${server.role}`) : t('account.superadmin') }}
           </Badge>
-          <Badge v-if="!server.connected" variant="outline">{{ t('home.notConnected') }}</Badge>
-          <Badge v-else variant="outline">RCON</Badge>
+          <Badge v-if="server.connectors.length === 0" variant="outline">
+            {{ t('home.notConnected') }}
+          </Badge>
+          <Badge v-for="connector in server.connectors" :key="connector" variant="outline">
+            {{ t(`connectors.${connector}`) }}
+          </Badge>
         </div>
         <span class="text-muted-foreground font-mono text-sm">{{ server.slug }}</span>
       </header>

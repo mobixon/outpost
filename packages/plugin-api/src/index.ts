@@ -7,6 +7,7 @@
 export * from './context.js';
 export * from './db.js';
 export * from './events.js';
+export * from './files.js';
 export * from './http.js';
 export * from './manifest.js';
 export * from './servers.js';

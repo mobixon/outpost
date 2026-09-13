@@ -26,6 +26,7 @@ describe('loadConfig', () => {
       setupToken: undefined,
       providers: [],
       auditRetentionDays: 180,
+      filesRoot: '/servers',
     });
   });
 

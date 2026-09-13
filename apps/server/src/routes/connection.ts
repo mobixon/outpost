@@ -7,14 +7,14 @@ import {
   rconConnectionInputSchema,
   serverStatusSchema,
 } from '@outpost/shared';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { AuthService } from '../auth/service.js';
 import { testConnection, type ConnectionManager } from '../connections/manager.js';
 import type { ServerService } from '../servers/service.js';
 
-/** How Outpost reaches a server (RCON in this version), a connection test and the status. */
+/** The RCON connector of a server, its test and the status of the server. */
 export function registerConnectionRoutes(
   fastify: FastifyInstance,
   auth: AuthService,
@@ -26,24 +26,11 @@ export function registerConnectionRoutes(
   const base = `${API_PREFIX}/servers/:serverId`;
   const params = z.object({ serverId: z.string() });
 
-  /**
-   * Connections are managed by superadmins: a connection points Outpost at a host and port in
-   * its network, which should not be up to the members of a server.
-   */
-  async function requireConnectionAdmin(request: FastifyRequest, serverId: string, sudo = false) {
-    const access = await servers.require(request, serverId, CorePermission.manage);
-    if (access.actor !== 'superadmin') {
-      throw new HttpError(403, 'forbidden', 'Only superadmins can change the connection');
-    }
-    if (sudo) auth.assertSudo(access.ctx);
-    return access;
-  }
-
   app.get(
     `${base}/connection`,
     { schema: { tags, params, response: { 200: connectionStateSchema } } },
     async (request) => {
-      const { server } = await requireConnectionAdmin(request, request.params.serverId);
+      const { server } = await servers.requireConnectorAdmin(request, request.params.serverId);
       return { connection: servers.connectionInfo(server) };
     },
   );
@@ -52,7 +39,11 @@ export function registerConnectionRoutes(
     `${base}/connection`,
     { schema: { tags, params, body: rconConnectionInputSchema } },
     async (request, reply) => {
-      const { server, ctx } = await requireConnectionAdmin(request, request.params.serverId, true);
+      const { server, ctx } = await servers.requireConnectorAdmin(
+        request,
+        request.params.serverId,
+        { sudo: true },
+      );
       const { game, host, port, password } = request.body;
       await servers.saveConnection(server, { game, host, port, password });
       connections.reset(server.id);
@@ -68,7 +59,9 @@ export function registerConnectionRoutes(
   );
 
   app.delete(`${base}/connection`, { schema: { tags, params } }, async (request, reply) => {
-    const { server, ctx } = await requireConnectionAdmin(request, request.params.serverId, true);
+    const { server, ctx } = await servers.requireConnectorAdmin(request, request.params.serverId, {
+      sudo: true,
+    });
     await servers.removeConnection(server.id);
     connections.reset(server.id);
     await auth.audit.record({
@@ -92,7 +85,7 @@ export function registerConnectionRoutes(
       },
     },
     async (request) => {
-      const { server } = await requireConnectionAdmin(request, request.params.serverId);
+      const { server } = await servers.requireConnectorAdmin(request, request.params.serverId);
       const { host, port } = request.body;
       const stored = servers.connectionOf(server);
       const password =

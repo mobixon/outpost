@@ -99,7 +99,7 @@ describe('servers', () => {
       get(server, '/api/v1/servers', cookie).then((response) => response.json());
 
     expect(await list(admin)).toMatchObject({
-      servers: [{ id: serverId, slug: 'survival', role: null, connected: false }],
+      servers: [{ id: serverId, slug: 'survival', role: null, connectors: [] }],
     });
     const taken = await send(server, 'POST', '/api/v1/servers', {
       cookie: admin,

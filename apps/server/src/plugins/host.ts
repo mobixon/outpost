@@ -114,6 +114,7 @@ export interface PluginHostOptions {
   secretKey: string;
   servers: PluginContext['servers'];
   commands: PluginContext['commands'];
+  files: PluginContext['files'];
   hasPermission: PluginContext['permissions']['has'];
   /** Mounts a plugin route on the HTTP server. */
   registerRoute(pluginId: string, route: RouteDefinition<RouteSchema, RouteAccess>): void;
@@ -191,6 +192,7 @@ export class PluginHost {
         kv: createKeyValueStore(db, plugin.id),
         servers: this.#options.servers,
         commands: this.#options.commands,
+        files: this.#options.files,
         permissions: { has: this.#options.hasPermission },
         secrets: {
           seal: (plaintext) => secrets.seal(plaintext),

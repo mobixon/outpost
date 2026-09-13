@@ -33,6 +33,7 @@ import { useErrorMessage } from '../../errors.js';
 import { loadServers } from '../../servers.js';
 import { useShell } from '../../shell.js';
 import ConnectionCard from './ConnectionCard.vue';
+import FilesCard from './FilesCard.vue';
 
 const { t } = useI18n();
 const isSuperadmin = useShell().session?.user?.isSuperadmin === true;
@@ -86,6 +87,7 @@ const remove = () =>
 <template>
   <div class="flex flex-col gap-6">
     <ConnectionCard v-if="isSuperadmin" />
+    <FilesCard v-if="isSuperadmin" />
     <Card>
       <CardHeader>
         <CardTitle>{{ t('servers.settings.title') }}</CardTitle>

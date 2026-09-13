@@ -28,6 +28,10 @@ export default {
     en: 'English',
     ru: 'Русский',
   },
+  connectors: {
+    rcon: 'RCON',
+    files: 'Files',
+  },
   auth: {
     setupTitle: 'Set up Outpost',
     setupText:
@@ -251,6 +255,24 @@ export default {
     protocol_error: 'The server answered in an unexpected way. Is this really an RCON port?',
     command_too_long: 'The command is too long for RCON.',
     rcon_password_required: 'Enter the RCON password.',
+    files_root_missing:
+      'The files root does not exist in the Outpost container: mount the folders of the game servers there.',
+    folder_not_found:
+      'The folder does not exist: is the data folder of the game server mounted into Outpost?',
+    folder_outside_root: 'The folder leads outside the files root.',
+    not_a_directory: 'This is not a folder.',
+    not_a_file: 'This is not a file.',
+    properties_not_found:
+      'The folder has no server.properties: is it the data folder of a Minecraft server?',
+    owner_mismatch:
+      'Outpost runs as another user (UID) than the owner of the files and would change their owner when writing. Run Outpost with the UID of the game server, or leave writing off.',
+    files_permission_denied: 'Outpost may not access these files.',
+    files_read_only: 'The folder is mounted read-only.',
+    files_test_failed: 'The folder did not pass the test.',
+    file_not_found: 'The file does not exist.',
+    file_too_large: 'The file is too large.',
+    invalid_path: 'The path is not valid.',
+    path_outside_folder: 'The path leads outside the folder of the server.',
   },
   home: {
     title: 'Game servers',
@@ -306,14 +328,8 @@ export default {
       submit: 'Add server',
     },
     connection: {
-      title: 'Connection',
-      text: 'How Outpost reaches the server. Only superadmins change it.',
-      type: 'Connection type',
-      rcon: 'RCON',
-      rconText: 'Console commands, chat and players over the RCON port of the server.',
-      full: 'Full',
-      fullText: 'Adds the live server log, status and file access through Docker.',
-      later: 'Coming later',
+      title: 'RCON',
+      text: 'Console commands, chat and players over the RCON port of the server. Only superadmins change the connectors of a server.',
       game: 'Game',
       host: 'Host',
       hostHint:
@@ -333,6 +349,29 @@ export default {
         command: 'Run the list command',
       },
     },
+    files: {
+      title: 'Files',
+      text: 'Gives modules access to the files of the server, such as server.properties and the whitelist. Only superadmins change the connectors of a server.',
+      source: 'Source',
+      folder: 'Folder mounted into Outpost',
+      sftp: 'SFTP',
+      later: 'coming later',
+      path: 'Folder',
+      pathHint:
+        'The data folder of the game server, mounted into the Outpost container below {root}. Docker Compose: the volume of the game server at {root}/<name>. CapRover: a persistent directory with the host path of the game server.',
+      writable: 'Allow writing',
+      writableHint:
+        'Modules may change files. Outpost must run as the owner of the files (UID); itzg/minecraft-server and Outpost both use UID 1000.',
+      test: 'Test',
+      save: 'Save',
+      saved: 'The file access was saved.',
+      remove: 'Disconnect',
+      steps: {
+        folder: 'Find the folder',
+        properties: 'Read server.properties',
+        write: 'Write a test file',
+      },
+    },
     notFoundTitle: 'Server not found',
     notFoundText: 'The server does not exist or you are not a member.',
     noAccess: 'You do not have access to this page.',
@@ -349,6 +388,7 @@ export default {
         'This server is not connected yet. A superadmin connects it over RCON in the settings of the server.',
       notConnectedAdmin: 'This server is not connected yet. Connect it over RCON to send commands.',
       connect: 'Connect',
+      noRcon: 'Connect RCON to see whether the server answers and who is online.',
       refresh: 'Check again',
       online: 'The server answers',
       offline: 'The server does not answer',

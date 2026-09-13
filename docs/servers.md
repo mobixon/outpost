@@ -6,8 +6,7 @@ members of, and on each server they can do what their role allows.
 ## Servers
 
 Superadmins add servers on the home page with a name and a short name, which appears in the
-addresses of the web UI (`/servers/<short name>`), and connect them under **Settings →
-Connection**.
+addresses of the web UI (`/servers/<short name>`), and connect them under **Settings**.
 
 Owners rename a server and delete it under **Settings**. Deleting removes the server from Outpost
 with its members and invitations; the game server itself is not touched, and the audit log keeps
@@ -15,9 +14,18 @@ its entries.
 
 ## Connecting a server
 
-This version connects over **RCON**, the remote console of Minecraft. The **Full** connection — the
-live server log, status and file access through Docker — is shown in the settings and arrives in a
-later version.
+A server is connected through **connectors**, which superadmins set up under **Settings**. Each
+connector is tested and saved on its own and adds **capabilities** to the server. Modules use the
+capabilities and do not care which connector provides them.
+
+| Connector | Capabilities                | Needs                                                    |
+| --------- | --------------------------- | -------------------------------------------------------- |
+| RCON      | `commands.send`             | the RCON port of the game server, reachable by Outpost   |
+| Files     | `files.read`, `files.write` | the data folder of the game server, mounted into Outpost |
+
+### RCON
+
+**RCON** is the remote console of Minecraft.
 
 1. RCON must be on (`enable-rcon=true` in `server.properties`; the `itzg/minecraft-server` image
    turns it on by default) and reachable from Outpost. Put both containers into one Docker network
@@ -28,8 +36,28 @@ later version.
 3. **Test** connects, logs in and runs `list`, and shows which step fails. **Save** stores the
    connection; the password is encrypted with `OUTPOST_SECRET_KEY` and never shown again.
 
-Only superadmins change connections, because a connection points Outpost at a host and port in its
-network. Once connected, **Overview** shows whether the server answers and who is online, and the
+### Files
+
+The **Files** connector gives modules the files of the server: `server.properties`, the whitelist,
+the logs, the world. In this version the source is a **folder** mounted into the Outpost container
+below `OUTPOST_FILES_ROOT` (`/servers` by default); SFTP follows.
+
+1. Mount the data folder of the game server into Outpost, for example at `/servers/survival` (see
+   [file access](install.md#file-access)).
+2. Enter the folder (`survival`) and choose whether modules may **write** files.
+3. **Test** checks that the folder exists and holds `server.properties` and, with writing on, that
+   Outpost can write there as the owner of the files: Outpost replaces files atomically, which makes
+   the writer their owner, so it refuses to write as another user (UID). `itzg/minecraft-server` and
+   Outpost both use UID 1000. **Save** runs the same test and keeps the connector only if it passes.
+
+Paths cannot leave the folder: absolute paths, `..` and symbolic links that lead outside are
+refused. No module of this version uses the files yet; the offline-mode whitelist, the live log from
+`logs/latest.log` and the settings editor will build on them.
+
+### Who connects
+
+Only superadmins change connectors, because a connector points Outpost at a host or a folder of its
+environment. Once RCON is connected, **Overview** shows whether the server answers and who is online, and the
 **Console** tab runs commands (owners and admins) and sends chat messages (also moderators). Every
 command and message is written to the audit log.
 
@@ -38,7 +66,7 @@ Limitations of the RCON connection:
 - the console shows the replies to commands, not the live server log;
 - on offline-mode servers, `whitelist add` for a player who has never joined stores the wrong
   (online) UUID, because Minecraft looks up unknown names at Mojang. Let such players join once with
-  the whitelist off, or wait for the file access of the full connection.
+  the whitelist off; a module on top of the Files connector will fix this.
 
 ## Players
 
@@ -158,6 +186,6 @@ export default definePlugin({
 
 Outpost answers `404` when the user cannot see the server, `403` without the permission and `409`
 when the server lacks the capability, before the handler runs. `ctx.commands.send(serverId, command)` runs a console command
-over the server's connection, `ctx.permissions.has()` checks a permission elsewhere (for example for live updates), and `ctx.secrets` encrypts secrets the plugin
+through the RCON connector (capability `commands.send`), `ctx.files` reads, writes, stats and lists the files of the server through the Files connector (`files.read`, `files.write`; paths relative to the server's folder), `ctx.permissions.has()` checks a permission elsewhere (for example for live updates), and `ctx.secrets` encrypts secrets the plugin
 stores. The web part of a plugin adds a tab to the server page with `serverTabs`, shown to users
 with the tab's permission.

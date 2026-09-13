@@ -84,8 +84,7 @@ describe('server connections', () => {
     });
     expect(stored.body).not.toContain(password);
     expect((await get(server, `/api/v1/servers/${serverId}`, owner.cookie)).json()).toMatchObject({
-      connected: true,
-      connectionType: 'rcon',
+      connectors: ['rcon'],
       game: 'minecraft-java',
       capabilities: ['commands.send'],
     });
@@ -110,7 +109,7 @@ describe('server connections', () => {
 
     expect((await send(server, 'DELETE', path, { cookie: admin })).statusCode).toBe(204);
     expect((await get(server, `/api/v1/servers/${serverId}`, owner.cookie)).json()).toMatchObject({
-      connected: false,
+      connectors: [],
       capabilities: [],
     });
   });
