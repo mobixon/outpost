@@ -43,6 +43,7 @@ describe('buildNavItems', () => {
         hasPassword: true,
         twoFactorEnabled: true,
         backupCodesLeft: 10,
+        theme: null,
         createdAt: '2026-01-01T00:00:00.000Z',
       },
       twoFactorEnrollmentRequired: false,

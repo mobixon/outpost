@@ -200,4 +200,10 @@ export const coreMigrations: readonly Migration[] = [
       await db.schema.alterTable('servers').addColumn('connection', types.json).execute();
     },
   },
+  {
+    name: '0006_user_theme',
+    async up(db) {
+      await db.schema.alterTable('users').addColumn('theme', 'text').execute();
+    },
+  },
 ];

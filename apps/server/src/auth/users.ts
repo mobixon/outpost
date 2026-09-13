@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { USERNAME_PATTERN, type CurrentUser } from '@outpost/shared';
+import { themeModeSchema, USERNAME_PATTERN, type CurrentUser } from '@outpost/shared';
 import type { Kysely, Selectable, Updateable } from 'kysely';
 import type { CoreTables, UsersTable } from '../db/schema.js';
 
@@ -37,6 +37,7 @@ export async function createUser(
     totp_last_step: null,
     totp_enabled_at: null,
     disabled_at: null,
+    theme: null,
     created_at: now,
     updated_at: now,
   };
@@ -149,6 +150,7 @@ export async function toCurrentUser(db: Kysely<CoreTables>, user: UserRow): Prom
     .where('user_id', '=', user.id)
     .where('used_at', 'is', null)
     .executeTakeFirstOrThrow();
+  const theme = themeModeSchema.safeParse(user.theme);
   return {
     id: user.id,
     username: user.username,
@@ -156,6 +158,7 @@ export async function toCurrentUser(db: Kysely<CoreTables>, user: UserRow): Prom
     hasPassword: user.password_hash !== null,
     twoFactorEnabled: user.totp_enabled_at !== null,
     backupCodesLeft: Number(row.count),
+    theme: theme.success ? theme.data : null,
     createdAt: new Date(user.created_at).toISOString(),
   };
 }

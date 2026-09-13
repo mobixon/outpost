@@ -47,6 +47,8 @@ export interface UsersTable {
   totp_last_step: number | null;
   totp_enabled_at: number | null;
   disabled_at: number | null;
+  /** `light`, `dark` or `system`; null until the user chooses a theme. */
+  theme: string | null;
   created_at: number;
   updated_at: number;
 }
