@@ -59,28 +59,51 @@ addresses), kicks and operator rights. It needs a connection.
 - Minecraft cannot tell over RCON whether the whitelist is on or who is an operator, so these are
   actions only. Sessions are kept for 180 days; every action is written to the audit log.
 
+## Scheduler
+
+The **Scheduler** tab runs tasks on a schedule. It needs a connection.
+
+- A **commands** task sends up to 20 console commands, one after another. An **announcement**
+  sends one of its messages to all players per run, in turn; `&` codes color and style them (`&6`
+  gold, `&c` red, `&l` bold, `&r` reset), with a preview in the editor.
+- The schedule is a five-field cron expression (minute, hour, day of month, month, day of week) in
+  the time zone of the task. The editor describes it in words and lists the next runs.
+- **Only when players are online** skips the runs while nobody plays. A run is also skipped while
+  the previous run of the task is still going, and when the server cannot be reached. Runs missed
+  while Outpost was not running are not made up for.
+- **Run now** runs a task at once. The last 100 runs of every task are kept with the result; the
+  output of the commands is shown to those who manage tasks.
+- A task never does more than its author could do by hand: managing tasks needs
+  `scheduler.manage`, and commands tasks also need `console.execute`, announcements `chat.send`.
+  Creating, changing, running and deleting tasks is written to the audit log; the scheduled runs
+  are in the run history.
+- The `stop` command shuts the server down. It starts again only if its container is restarted
+  automatically, as CapRover and Docker with a restart policy do.
+
 ## Roles
 
-| Permission                                             | Owner | Admin | Moderator | Viewer |
-| ------------------------------------------------------ | :---: | :---: | :-------: | :----: |
-| See the server (`server.view`)                         |   ✓   |   ✓   |     ✓     |   ✓    |
-| Rename and delete the server (`server.manage`)         |   ✓   |       |           |        |
-| Manage members and invite people (`members.manage`)    |   ✓   |  ✓¹   |           |        |
-| Read the server's audit log (`audit.view`)             |   ✓   |   ✓   |           |        |
-| Run any console command (`console.execute`)            |   ✓   |   ✓   |           |        |
-| Send chat messages (`chat.send`)                       |   ✓   |   ✓   |     ✓     |        |
-| See the players, whitelist and bans (`players.view`)   |   ✓   |   ✓   |     ✓     |   ✓    |
-| Kick players (`players.kick`)                          |   ✓   |   ✓   |     ✓     |        |
-| Ban and unban players and IP addresses (`players.ban`) |   ✓   |   ✓   |     ✓     |        |
-| Manage the whitelist (`players.whitelist`)             |   ✓   |   ✓   |     ✓     |        |
-| Give and take operator rights (`players.op`)           |   ✓   |   ✓   |           |        |
+| Permission                                                | Owner | Admin | Moderator | Viewer |
+| --------------------------------------------------------- | :---: | :---: | :-------: | :----: |
+| See the server (`server.view`)                            |   ✓   |   ✓   |     ✓     |   ✓    |
+| Rename and delete the server (`server.manage`)            |   ✓   |       |           |        |
+| Manage members and invite people (`members.manage`)       |   ✓   |  ✓¹   |           |        |
+| Read the server's audit log (`audit.view`)                |   ✓   |   ✓   |           |        |
+| Run any console command (`console.execute`)               |   ✓   |   ✓   |           |        |
+| Send chat messages (`chat.send`)                          |   ✓   |   ✓   |     ✓     |        |
+| See the players, whitelist and bans (`players.view`)      |   ✓   |   ✓   |     ✓     |   ✓    |
+| Kick players (`players.kick`)                             |   ✓   |   ✓   |     ✓     |        |
+| Ban and unban players and IP addresses (`players.ban`)    |   ✓   |   ✓   |     ✓     |        |
+| Manage the whitelist (`players.whitelist`)                |   ✓   |   ✓   |     ✓     |        |
+| Give and take operator rights (`players.op`)              |   ✓   |   ✓   |           |        |
+| See the scheduled tasks and their runs (`scheduler.view`) |   ✓   |   ✓   |     ✓     |   ✓    |
+| Create, change, run and delete tasks (`scheduler.manage`) |   ✓   |   ✓   |           |        |
 
 ¹ Admins manage only moderators and viewers: they can add, change, remove and invite people with
 these roles, but cannot touch owners and other admins. Owners manage every role, including other
 owners.
 
-The console and player permissions come from the console and players modules: modules add their
-own permissions with the roles that have them.
+The console, player and scheduler permissions come from their modules: modules add their own
+permissions with the roles that have them.
 
 **Superadmins** are the administrators of the whole Outpost instance. They have every permission
 on every server without being members, manage user accounts and see the audit log of the

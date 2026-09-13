@@ -232,6 +232,9 @@ importers:
       '@outpost/plugin-players':
         specifier: workspace:*
         version: link:../../plugins/players
+      '@outpost/plugin-scheduler':
+        specifier: workspace:*
+        version: link:../../plugins/scheduler
       '@outpost/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -290,6 +293,9 @@ importers:
       '@outpost/plugin-players':
         specifier: workspace:*
         version: link:../../plugins/players
+      '@outpost/plugin-scheduler':
+        specifier: workspace:*
+        version: link:../../plugins/scheduler
       '@outpost/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -475,6 +481,43 @@ importers:
       '@outpost/web-plugin-api':
         specifier: workspace:*
         version: link:../../packages/web-plugin-api
+      zod:
+        specifier: ^4.6.2
+        version: 4.6.2
+    devDependencies:
+      vue:
+        specifier: ^3.5.42
+        version: 3.5.42(typescript@6.0.3)
+      vue-i18n:
+        specifier: ^11.4.10
+        version: 11.4.10(vue@3.5.42(typescript@6.0.3))
+      vue-router:
+        specifier: ^5.3.1
+        version: 5.3.1(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(rolldown@1.2.8)(vite@8.3.0(@types/node@24.13.4)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))(vue@3.5.42(typescript@6.0.3))
+
+  plugins/scheduler:
+    dependencies:
+      '@lucide/vue':
+        specifier: ^1.45.0
+        version: 1.45.0(vue@3.5.42(typescript@6.0.3))
+      '@outpost/plugin-api':
+        specifier: workspace:*
+        version: link:../../packages/plugin-api
+      '@outpost/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@outpost/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@outpost/web-plugin-api':
+        specifier: workspace:*
+        version: link:../../packages/web-plugin-api
+      croner:
+        specifier: ^10.0.1
+        version: 10.0.1
+      cronstrue:
+        specifier: ^3.26.0
+        version: 3.26.0
       zod:
         specifier: ^4.6.2
         version: 4.6.2
@@ -1447,6 +1490,14 @@ packages:
   cookie@2.0.1:
     resolution: {integrity: sha512-yuToqVvRrj6pfDXREyQAAv8SkAEk/8GS3jQRTiUMm66TVtBYmqQeoEjL2Lmq8Rpo6271vH76InTChTitEAm65w==}
     engines: {node: '>=22'}
+
+  croner@10.0.1:
+    resolution: {integrity: sha512-ixNtAJndqh173VQ4KodSdJEI6nuioBWI0V1ITNKhZZsO0pEMoDxz539T4FTTbSZ/xIOSuDnzxLVRqBVSvPNE2g==}
+    engines: {node: '>=18.0'}
+
+  cronstrue@3.26.0:
+    resolution: {integrity: sha512-PEXTHEir/KllAWMsOQOsv3ZXjI6Y1PA1eVAEM/WhCaesAcCYHldra9pr2jkFH6r/ynbEOAPOGoWYz9NkjP0huA==}
+    hasBin: true
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -3451,6 +3502,10 @@ snapshots:
   cookie@1.1.1: {}
 
   cookie@2.0.1: {}
+
+  croner@10.0.1: {}
+
+  cronstrue@3.26.0: {}
 
   cross-spawn@7.0.6:
     dependencies:
