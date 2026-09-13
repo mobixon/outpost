@@ -15,6 +15,7 @@
     "@outpost/plugin-about": "workspace:*",
     "@outpost/plugin-console": "workspace:*",
     "@outpost/plugin-players": "workspace:*",
+    "@outpost/plugin-scheduler": "workspace:*",
     "@outpost/shared": "workspace:*",
     "@outpost/ui": "workspace:*",
     "@outpost/web-plugin-api": "workspace:*",

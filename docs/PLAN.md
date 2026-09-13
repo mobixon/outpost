@@ -389,16 +389,21 @@ Non-itzg servers: nothing is locked unless the user marks keys manually (roadmap
 
 ## 8. Scheduler module
 
-- Task types v0.1: **command** (one or more RCON commands) and **announcement** (rotating list of
-  messages sent with `tellraw`, one per run, formatting helper in the UI).
-- Schedule: cron expression with a human-readable preview and next 5 runs; per-task time zone
-  (default: the browser's zone at creation time). Library: `croner`.
-- Options: enabled, "only when players are online", overlap policy (skip if previous still running).
-- Missed runs while Outpost was down are skipped (logged), not replayed.
+- Task types v0.1: **command** (up to 20 console commands, run back to back — no pauses between
+  them; steps with pauses for a restart with warnings stay on the roadmap, decided 2026-09-13) and
+  **announcement** (rotating list of messages sent with `tellraw`, one per run, `&` color codes with
+  a preview in the UI). Besides `scheduler.manage`, command tasks need `console.execute` and
+  announcements `chat.send`, so a task never does more than its author could do by hand.
+- Schedule: five-field cron expression with a human-readable preview (`cronstrue`) and the next 5
+  runs; per-task time zone (default: the browser's zone at creation time). Library: `croner`.
+- Options: enabled, "only when players are online". A run is skipped while the previous run of
+  the same task is still going.
+- Missed runs while Outpost was down are skipped, not replayed.
 - If RCON is unavailable the run is recorded as `skipped` with a reason.
-- Run history (status, duration, output), keep last 100 runs per task. "Run now" button.
-- Task types are registered through `ctx.scheduler.registerTaskType` so other modules can add them
-  (e.g. restart-with-warnings and backups later).
+- Run history (status, trigger, output), keep last 100 runs per task; the output is shown to users
+  who manage tasks. "Run now" button.
+- Task types are built into the scheduler module in v0.1; `ctx.scheduler.registerTaskType` for
+  other modules comes with the first module that needs it (e.g. restart-with-warnings, backups).
 
 ---
 
@@ -483,8 +488,9 @@ Module tables (namespaced by plugin):
 - players: `mc_players` (server_id, uuid, name, first_seen, last_seen, last_ip, playtime_s),
   `mc_player_sessions` (server_id, uuid, joined_at, left_at?, ip, leave_reason?),
   `mc_pending_actions` (server_id, name, action, args JSON, created_by, created_at, applied_at?)
-- scheduler: `sched_tasks` (id, server_id, name, type, cron, timezone, payload JSON, options JSON,
-  enabled, created_by, created_at), `sched_runs` (task_id, started_at, finished_at, status, output)
+- scheduler: `sched_tasks` (id, server_id, name, type, cron, timezone, lines JSON, enabled,
+  only_with_players, next_index, created_by, created_at, updated_at), `sched_runs` (task_id,
+  trigger, status, reason, output, triggered_by, started_at, finished_at)
 
 Dual-dialect approach: **Kysely** (a typed SQL query builder) instead of an ORM, because one
 query and one migration code path works on both databases (Drizzle needs a schema and queries
