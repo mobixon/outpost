@@ -18,10 +18,10 @@ A server is connected through **connectors**, which superadmins set up under **S
 connector is tested and saved on its own and adds **capabilities** to the server. Modules use the
 capabilities and do not care which connector provides them.
 
-| Connector | Capabilities                | Needs                                                    |
-| --------- | --------------------------- | -------------------------------------------------------- |
-| RCON      | `commands.send`             | the RCON port of the game server, reachable by Outpost   |
-| Files     | `files.read`, `files.write` | the data folder of the game server, mounted into Outpost |
+| Connector | Capabilities                | Needs                                                                  |
+| --------- | --------------------------- | ---------------------------------------------------------------------- |
+| RCON      | `commands.send`             | the RCON port of the game server, reachable by Outpost                 |
+| Files     | `files.read`, `files.write` | the data folder of the game server: mounted into Outpost, or over SFTP |
 
 ### RCON
 
@@ -39,16 +39,40 @@ capabilities and do not care which connector provides them.
 ### Files
 
 The **Files** connector gives modules the files of the server: `server.properties`, the whitelist,
-the logs, the world. In this version the source is a **folder** mounted into the Outpost container
-below `OUTPOST_FILES_ROOT` (`/servers` by default); SFTP follows.
+the logs, the world. It has two sources:
+
+- **Folder**: the data folder of the game server, mounted into the Outpost container below
+  `OUTPOST_FILES_ROOT` (`/servers` by default), for game servers next to Outpost;
+- **SFTP**: for game servers elsewhere, for example at a game host that offers SFTP.
+
+With either source, **Save** runs the same test as **Test** and keeps the connector only if it
+passes, and modules may **write** files only when writing is on.
+
+**Folder**
 
 1. Mount the data folder of the game server into Outpost, for example at `/servers/survival` (see
    [file access](install.md#file-access)).
-2. Enter the folder (`survival`) and choose whether modules may **write** files.
+2. Enter the folder (`survival`) and choose whether modules may write files.
 3. **Test** checks that the folder exists and holds `server.properties` and, with writing on, that
    Outpost can write there as the owner of the files: Outpost replaces files atomically, which makes
    the writer their owner, so it refuses to write as another user (UID). `itzg/minecraft-server` and
-   Outpost both use UID 1000. **Save** runs the same test and keeps the connector only if it passes.
+   Outpost both use UID 1000.
+
+**SFTP**
+
+1. Enter the host, the port (22), the username, the password or a private key (OpenSSH or PEM
+   format, with its passphrase if it has one) and the folder of the game server on the SFTP server,
+   for example `/` or `/minecraft`. Passwords and keys are encrypted with `OUTPOST_SECRET_KEY` and
+   never shown again.
+2. **Test** connects and shows the fingerprint of the **host key** (`SHA256:…`), logs in, and checks
+   the folder, `server.properties` and, with writing on, that new files get the owner of the files
+   of the server. Compare the fingerprint with the one your host shows.
+3. **Save** pins the host key: Outpost refuses to connect when the server presents another key
+   later. If your host really changed its key, test again and save to pin the new key.
+
+Writes go to a temporary file that replaces the target, atomically where the server supports
+`posix-rename@openssh.com`, as OpenSSH does. Modules share one SFTP session per server, which is
+closed after a minute without use.
 
 Paths cannot leave the folder: absolute paths, `..` and symbolic links that lead outside are
 refused. No module of this version uses the files yet; the offline-mode whitelist, the live log from

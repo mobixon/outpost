@@ -28,9 +28,17 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U outpost" --health-interval 5s --health-timeout 5s
           --health-retries 10
+      # OpenSSH as SFTP server: user outpost with the writable folder /survival.
+      sftp:
+        image: atmoz/sftp:alpine
+        env:
+          SFTP_USERS: outpost:ci-sftp-password:1001:100:survival
+        ports: ['2222:22']
     env:
       # Database tests also run against PostgreSQL when this is set.
       OUTPOST_TEST_POSTGRES_URL: postgres://outpost:outpost@localhost:5432/outpost_test
+      # File tests also run against the SFTP server when this is set.
+      OUTPOST_TEST_SFTP_URL: sftp://outpost:ci-sftp-password@localhost:2222/survival
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
