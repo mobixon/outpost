@@ -3,7 +3,7 @@
 Outpost runs as one container with the web UI, the API and the database (SQLite by default).
 Images are published on the GitHub Container Registry as `ghcr.io/mobixon/outpost:<version>` for
 linux/amd64; the versions are listed under [releases](https://github.com/mobixon/outpost/releases).
-Pin a version. Pre-releases such as `0.1.0-rc.1` do not move the `latest` tag.
+Pin a version. Pre-releases such as `0.2.0-rc.1` do not move the `latest` tag.
 
 You need:
 
@@ -17,7 +17,7 @@ You need:
 ```yaml
 services:
   outpost:
-    image: ghcr.io/mobixon/outpost:0.1.0-rc.1
+    image: ghcr.io/mobixon/outpost:0.1.0
     restart: unless-stopped
     ports:
       - '127.0.0.1:3000:3000' # for the reverse proxy on the same host
