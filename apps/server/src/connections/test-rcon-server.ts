@@ -12,11 +12,12 @@ export interface FakeRconServer {
 
 /**
  * `reply` answers a command; `undefined` makes the server stop answering (for timeouts), and
- * `drop()` closes the connection instead of answering.
+ * `drop()` closes the connection instead of answering. A promise makes the command slow: like
+ * Minecraft, the server then drops the connection when another request arrives before the reply.
  */
 export async function startFakeRconServer(options: {
   password: string;
-  reply?: (command: string, drop: () => void) => string | undefined;
+  reply?: (command: string, drop: () => void) => string | undefined | Promise<string | undefined>;
 }): Promise<FakeRconServer> {
   const commands: string[] = [];
   const sockets = new Set<Socket>();
@@ -27,12 +28,29 @@ export async function startFakeRconServer(options: {
     let buffer: Buffer = Buffer.alloc(0);
     let loggedIn = false;
     let stalled = false;
+    let busy = false;
+    const answer = (id: number, reply: string | undefined) => {
+      if (reply === undefined) {
+        stalled = true;
+        return;
+      }
+      if (socket.destroyed) return;
+      let offset = 0;
+      do {
+        socket.write(encodePacket(id, 0, reply.slice(offset, offset + 4096)));
+        offset += 4096;
+      } while (offset < reply.length);
+    };
     socket.on('data', (chunk) => {
       buffer = Buffer.concat([buffer, chunk]);
       const decoded = decodePackets(buffer);
       buffer = decoded.rest;
       for (const packet of decoded.packets) {
         if (stalled) return;
+        if (busy) {
+          socket.destroy();
+          return;
+        }
         if (packet.type === 3) {
           loggedIn = packet.body === options.password;
           socket.write(encodePacket(loggedIn ? packet.id : -1, 2, ''));
@@ -41,15 +59,15 @@ export async function startFakeRconServer(options: {
         } else if (packet.type === 2) {
           commands.push(packet.body);
           const reply = (options.reply ?? (() => ''))(packet.body, () => socket.destroy());
-          if (reply === undefined) {
-            stalled = true;
-            return;
+          if (reply instanceof Promise) {
+            busy = true;
+            void reply.then((value) => {
+              busy = false;
+              answer(packet.id, value);
+            });
+          } else {
+            answer(packet.id, reply);
           }
-          let offset = 0;
-          do {
-            socket.write(encodePacket(packet.id, 0, reply.slice(offset, offset + 4096)));
-            offset += 4096;
-          } while (offset < reply.length);
         } else {
           socket.write(encodePacket(packet.id, 0, `Unknown request ${packet.type.toString(16)}`));
         }

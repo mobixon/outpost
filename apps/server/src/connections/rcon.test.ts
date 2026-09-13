@@ -69,6 +69,18 @@ describe('RconClient', () => {
     client.close();
   });
 
+  it('waits for the reply before the next request, as a busy Minecraft needs', async () => {
+    // Slow like a name Minecraft looks up at Mojang; a request sent meanwhile drops the connection.
+    const server = await start(async (command) => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return `slow ${command}`;
+    });
+    const client = await connect(server.port);
+    expect(await client.send('whitelist add Someone')).toBe('slow whitelist add Someone');
+    expect(await client.send('whitelist list')).toBe('slow whitelist list');
+    client.close();
+  });
+
   it('rejects a wrong password, a refused connection and a long command', async () => {
     const server = await start();
     expect(await codeOf(connect(server.port, { password: 'wrong' }))).toBe('auth_failed');
