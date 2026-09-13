@@ -49,8 +49,8 @@ two-factor login and an audit log.
   </tr>
 </table>
 
-> **Status: preview.** v0.1.0-rc.2 manages a real server; v0.1.0 comes next. The
-> [project plan](docs/PLAN.md) describes what is built and in which order.
+> **Version 0.1** is the first release; it runs a real Minecraft server in production. The
+> [project plan](docs/PLAN.md) describes what comes next.
 
 ## Install next to your server
 
@@ -70,7 +70,7 @@ services:
       - minecraft-data:/data
 
   outpost:
-    image: ghcr.io/mobixon/outpost:0.1.0-rc.2
+    image: ghcr.io/mobixon/outpost:0.1.0
     restart: unless-stopped
     ports:
       - '127.0.0.1:3000:3000'
