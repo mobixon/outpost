@@ -117,7 +117,7 @@ export default definePlugin({
       capability: 'commands.send',
       schema: { body: chatRequestSchema },
       handler: async ({ server, user, body, ip }) => {
-        await ctx.commands.send(server.id, chatCommand(user.username, body.message));
+        await ctx.commands.send(server.id, chatCommand(body.message));
         await ctx.audit.record({
           action: 'chat',
           userId: user.id,

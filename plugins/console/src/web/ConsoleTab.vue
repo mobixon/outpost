@@ -305,7 +305,7 @@ const clear = () => {
           <div v-for="entry in entries" :key="entry.id" class="break-words whitespace-pre-wrap">
             <span v-if="entry.kind === 'command'" class="text-sky-300">&gt; {{ entry.text }}</span>
             <span v-else-if="entry.kind === 'chat'" class="text-zinc-400"
-              >[Web] {{ entry.text }}</span
+              >[Server] {{ entry.text }}</span
             >
             <span v-else-if="entry.kind === 'error'" class="text-red-400">{{ entry.text }}</span>
             <span v-else :class="entry.kind === 'log' ? LEVEL_CLASS[entry.level ?? 'info'] : ''">
