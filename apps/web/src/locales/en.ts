@@ -285,6 +285,13 @@ export default {
     chat: {
       send: 'Send chat messages to the players',
     },
+    players: {
+      view: 'See the players, the whitelist and the bans',
+      kick: 'Kick players',
+      ban: 'Ban and unban players',
+      whitelist: 'Manage the whitelist',
+      op: 'Give and take operator rights',
+    },
   },
   games: {
     minecraftJava: 'Minecraft: Java Edition',

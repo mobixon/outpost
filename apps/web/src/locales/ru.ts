@@ -286,6 +286,13 @@ export default {
     chat: {
       send: 'Писать игрокам в чат',
     },
+    players: {
+      view: 'Видеть игроков, вайтлист и баны',
+      kick: 'Кикать игроков',
+      ban: 'Банить и разбанивать игроков',
+      whitelist: 'Управлять вайтлистом',
+      op: 'Выдавать и снимать права оператора',
+    },
   },
   games: {
     minecraftJava: 'Minecraft: Java Edition',

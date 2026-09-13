@@ -24,7 +24,9 @@ export interface ServerInfo {
   id: string;
   slug: string;
   name: string;
-  /** What the server supports with its connection and game module, e.g. `logs.stream`. */
+  /** Game module id, e.g. `minecraft-java`; null until the server is connected. */
+  game: string | null;
+  /** What the server supports with its connection and game module, e.g. `commands.send`. */
   capabilities: readonly string[];
 }
 

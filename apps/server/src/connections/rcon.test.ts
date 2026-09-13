@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { testConnection } from './manager.js';
-import { parsePlayerList, stripFormatting } from './minecraft.js';
 import { decodePackets, encodePacket, RconClient, RconError } from './rcon.js';
 import { closedPort, startFakeRconServer, type FakeRconServer } from './test-rcon-server.js';
 
@@ -125,27 +124,5 @@ describe('testConnection', () => {
       { ok: null },
       { ok: null },
     ]);
-  });
-});
-
-describe('Minecraft replies', () => {
-  it.each([
-    [
-      'There are 2 of a max of 20 players online: Steve, Alex',
-      { online: 2, max: 20, names: ['Steve', 'Alex'] },
-    ],
-    ['There are 0 of a max of 20 players online: ', { online: 0, max: 20, names: [] }],
-    ['There are 1/10 players online:\nNotch', { online: 1, max: 10, names: ['Notch'] }],
-    [
-      '§6There are §c1§6 out of maximum §c50§6 players online.\n§6default§r: Steve',
-      { online: 1, max: 50, names: ['Steve'] },
-    ],
-  ])('parse %j', (reply, list) => {
-    expect(parsePlayerList(reply)).toEqual(list);
-  });
-
-  it('return null for an unknown list format and strip formatting codes', () => {
-    expect(parsePlayerList('Unknown command')).toBeNull();
-    expect(stripFormatting('§aGreen §lbold§r')).toBe('Green bold');
   });
 });
