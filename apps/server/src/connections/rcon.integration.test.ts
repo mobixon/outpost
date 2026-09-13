@@ -1,6 +1,6 @@
+import { normalizeReason, parseBanList, parsePlayerList, parseWhitelist } from '@outpost/shared';
 import { describe, expect, it } from 'vitest';
 import { testConnection } from './manager.js';
-import { parsePlayerList } from './minecraft.js';
 import { RconClient } from './rcon.js';
 
 // Runs only against a real Minecraft server; CI starts itzg/minecraft-server for it.
@@ -49,5 +49,37 @@ describe.skipIf(target === undefined)('RCON against a real Minecraft server', ()
 
   it('passes the connection test', async () => {
     expect((await testConnection(server)).ok).toBe(true);
+  });
+
+  // Minecraft looks up names it has not seen at Mojang, which can take a while.
+  it('answers the player commands in the formats Outpost reads', { timeout: 60_000 }, async () => {
+    const client = await RconClient.connect({ ...server, timeoutMs: 30_000 });
+    const name = 'OutpostCiPlayer';
+    try {
+      await client.send(`whitelist add ${name}`);
+      const whitelist = parseWhitelist(await client.send('whitelist list'));
+      expect(whitelist?.map((entry) => entry.toLowerCase())).toContain(name.toLowerCase());
+
+      await client.send(`ban ${name} ${normalizeReason('testing the ban list')}`);
+      await client.send(`ban-ip 10.9.8.7 ${normalizeReason('testing')}`);
+      expect(parseBanList(await client.send('banlist players'), 'players')).toContainEqual({
+        target: expect.stringMatching(new RegExp(`^${name}$`, 'i')),
+        source: 'Rcon',
+        reason: 'testing the ban list.',
+      });
+      expect(parseBanList(await client.send('banlist ips'), 'ips')).toContainEqual({
+        target: '10.9.8.7',
+        source: 'Rcon',
+        reason: 'testing.',
+      });
+    } finally {
+      client.close();
+      // A fresh connection, so that a failure above is reported instead of the cleanup's.
+      const cleanup = await RconClient.connect(server);
+      for (const command of [`pardon ${name}`, 'pardon-ip 10.9.8.7', `whitelist remove ${name}`]) {
+        await cleanup.send(command).catch(() => undefined);
+      }
+      cleanup.close();
+    }
   });
 });

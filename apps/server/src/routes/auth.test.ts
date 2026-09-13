@@ -57,12 +57,16 @@ async function enableTwoFactor(app: FastifyInstance, cookie: string) {
   });
   expect(wrong.statusCode).toBe(400);
 
-  const enabled = await send(app, 'POST', '/api/v1/me/2fa/enable', {
-    cookie,
-    body: { code: totpAt(secret, Date.now()) },
-  });
+  const enabledAt = Date.now();
+  const code = totpAt(secret, enabledAt);
+  const enabled = await send(app, 'POST', '/api/v1/me/2fa/enable', { cookie, body: { code } });
   expect(enabled.statusCode).toBe(200);
-  return { secret, backupCodes: enabled.json<{ backupCodes: string[] }>().backupCodes };
+  return {
+    secret,
+    code,
+    enabledAt,
+    backupCodes: enabled.json<{ backupCodes: string[] }>().backupCodes,
+  };
 }
 
 /** Signs in with password and second factor and returns the session cookie. */
@@ -149,7 +153,7 @@ describe('login with two-factor authentication', () => {
   it('asks for a code after the password and rejects replayed codes', async () => {
     const app = await start();
     const cookie = await setUpAdmin(app);
-    const { secret } = await enableTwoFactor(app, cookie);
+    const { secret, code, enabledAt } = await enableTwoFactor(app, cookie);
 
     expect((await send(app, 'POST', '/api/v1/auth/logout', { cookie })).statusCode).toBe(204);
     expect((await get(app, '/api/v1/me', cookie)).statusCode).toBe(401);
@@ -169,13 +173,14 @@ describe('login with two-factor authentication', () => {
     // The code used to enable 2FA was just accepted, so it cannot be used again.
     const replay = await send(app, 'POST', '/api/v1/auth/login/2fa', {
       cookie: pending,
-      body: { code: totpAt(secret, Date.now()) },
+      body: { code },
     });
     expect(replay.json()).toMatchObject({ error: { code: 'invalid_code' } });
 
+    // The code of the next time step, also when a step boundary has passed since.
     const next = await send(app, 'POST', '/api/v1/auth/login/2fa', {
       cookie: pending,
-      body: { code: totpAt(secret, Date.now() + 30_000) },
+      body: { code: totpAt(secret, enabledAt + 30_000) },
     });
     expect(next.json()).toEqual({ status: 'active' });
     expect((await get(app, '/api/v1/me', sessionCookie(next))).statusCode).toBe(200);

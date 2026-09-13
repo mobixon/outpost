@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { testConnection } from './manager.js';
-import { parsePlayerList, stripFormatting } from './minecraft.js';
 import { decodePackets, encodePacket, RconClient, RconError } from './rcon.js';
 import { closedPort, startFakeRconServer, type FakeRconServer } from './test-rcon-server.js';
 
@@ -70,6 +69,18 @@ describe('RconClient', () => {
     client.close();
   });
 
+  it('waits for the reply before the next request, as a busy Minecraft needs', async () => {
+    // Slow like a name Minecraft looks up at Mojang; a request sent meanwhile drops the connection.
+    const server = await start(async (command) => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return `slow ${command}`;
+    });
+    const client = await connect(server.port);
+    expect(await client.send('whitelist add Someone')).toBe('slow whitelist add Someone');
+    expect(await client.send('whitelist list')).toBe('slow whitelist list');
+    client.close();
+  });
+
   it('rejects a wrong password, a refused connection and a long command', async () => {
     const server = await start();
     expect(await codeOf(connect(server.port, { password: 'wrong' }))).toBe('auth_failed');
@@ -125,27 +136,5 @@ describe('testConnection', () => {
       { ok: null },
       { ok: null },
     ]);
-  });
-});
-
-describe('Minecraft replies', () => {
-  it.each([
-    [
-      'There are 2 of a max of 20 players online: Steve, Alex',
-      { online: 2, max: 20, names: ['Steve', 'Alex'] },
-    ],
-    ['There are 0 of a max of 20 players online: ', { online: 0, max: 20, names: [] }],
-    ['There are 1/10 players online:\nNotch', { online: 1, max: 10, names: ['Notch'] }],
-    [
-      '§6There are §c1§6 out of maximum §c50§6 players online.\n§6default§r: Steve',
-      { online: 1, max: 50, names: ['Steve'] },
-    ],
-  ])('parse %j', (reply, list) => {
-    expect(parsePlayerList(reply)).toEqual(list);
-  });
-
-  it('return null for an unknown list format and strip formatting codes', () => {
-    expect(parsePlayerList('Unknown command')).toBeNull();
-    expect(stripFormatting('§aGreen §lbold§r')).toBe('Green bold');
   });
 });

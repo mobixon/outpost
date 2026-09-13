@@ -24,6 +24,7 @@
     "@outpost/plugin-about": "workspace:*",
     "@outpost/plugin-api": "workspace:*",
     "@outpost/plugin-console": "workspace:*",
+    "@outpost/plugin-players": "workspace:*",
     "@outpost/shared": "workspace:*",
     "better-sqlite3": "^13.0.3",
     "fastify": "^5.12.4",

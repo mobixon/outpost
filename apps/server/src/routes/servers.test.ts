@@ -440,7 +440,7 @@ describe('plugin access to servers', () => {
     );
     expect(await plugin.permissions.has(members.outsider.id, serverId, 'test.read')).toBe(false);
     expect(await plugin.servers.list()).toEqual([
-      { id: serverId, slug: 'survival', name: 'Server survival', capabilities: [] },
+      { id: serverId, slug: 'survival', name: 'Server survival', game: null, capabilities: [] },
     ]);
     const sealed = plugin.secrets.seal('rcon password');
     expect(sealed).not.toContain('rcon');

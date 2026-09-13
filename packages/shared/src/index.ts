@@ -3,6 +3,7 @@ import { z } from 'zod';
 export * from './admin.js';
 export * from './auth.js';
 export * from './connection.js';
+export * from './minecraft.js';
 export * from './servers.js';
 
 /** Base path of the HTTP API. */

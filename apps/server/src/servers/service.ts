@@ -215,6 +215,7 @@ export class ServerService {
       id: server.id,
       slug: server.slug,
       name: server.name,
+      game: this.gameOf(server),
       capabilities: this.capabilities(server),
     };
   }

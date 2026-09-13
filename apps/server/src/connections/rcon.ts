@@ -257,13 +257,19 @@ export class RconClient {
     const id = this.#takeId();
     const sentinel = this.#takeId();
     const parts: string[] = [];
-    return this.#request<string>(
-      [encodePacket(id, TYPE_COMMAND, command), encodePacket(sentinel, TYPE_SENTINEL, '')],
-      (packet, done) => {
-        if (packet.id === id && packet.type === TYPE_RESPONSE) parts.push(packet.body);
-        else if (packet.id === sentinel) done(parts.join(''));
-      },
-    );
+    let sentinelSent = false;
+    return this.#request<string>([encodePacket(id, TYPE_COMMAND, command)], (packet, done) => {
+      if (packet.id === id && packet.type === TYPE_RESPONSE) {
+        parts.push(packet.body);
+        // Minecraft can drop the connection when a request arrives while it is still running the
+        // command before (seen with names it looks up at Mojang), so the sentinel goes out only
+        // once the command has been answered.
+        if (!sentinelSent) {
+          sentinelSent = true;
+          this.#socket?.write(encodePacket(sentinel, TYPE_SENTINEL, ''));
+        }
+      } else if (packet.id === sentinel) done(parts.join(''));
+    });
   }
 
   #takeId(): number {
