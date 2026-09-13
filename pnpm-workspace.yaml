@@ -5,5 +5,8 @@ packages:
   - e2e
 allowBuilds:
   better-sqlite3: true
+  # ssh2 works without its optional native crypto binding.
+  cpu-features: false
   esbuild: true
+  ssh2: false
   vue-demi: false

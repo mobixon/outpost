@@ -148,6 +148,7 @@ describe('testFolder', () => {
         },
         { step: 'write', ok: true, error: null, detail: null },
       ],
+      hostKey: null,
     });
     expect(await readdir(path.join(root, 'survival'))).toEqual(['server.properties', 'world']);
   });

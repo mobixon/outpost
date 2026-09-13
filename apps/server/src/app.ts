@@ -41,6 +41,7 @@ import { CORE_SCOPE, coreMigrations } from './db/core-migrations.js';
 import { runMigrations } from './db/migrator.js';
 import { createEventBus } from './events.js';
 import { createFileAccess } from './files/access.js';
+import { SftpSessions } from './files/sftp.js';
 import { registerSecurity } from './http/security.js';
 import { isClientRoute, registerWebUi } from './http/web-ui.js';
 import { PluginHost, resolvePlugins } from './plugins/host.js';
@@ -96,9 +97,11 @@ export async function buildApp(
   let host: PluginHost | undefined;
   let pruneTimer: NodeJS.Timeout | undefined;
   let connections: ConnectionManager | undefined;
+  const sftpSessions = new SftpSessions();
   app.addHook('onClose', async () => {
     clearInterval(pruneTimer);
     connections?.closeAll();
+    sftpSessions.closeAll();
     await host?.stop();
     await db.destroy();
   });
@@ -165,7 +168,11 @@ export async function buildApp(
         commands: {
           send: (serverId, command) => connectionManager.send(serverId, command),
         },
-        files: createFileAccess(config.filesRoot, (serverId) => servers.filesSettings(serverId)),
+        files: createFileAccess(
+          config.filesRoot,
+          (serverId) => servers.filesSettings(serverId),
+          sftpSessions,
+        ),
         hasPermission: async (userId, serverId, permission) => {
           const user = await findUserById(db, userId);
           if (user === undefined || user.disabled_at !== null) return false;
@@ -197,7 +204,7 @@ export async function buildApp(
     registerUserRoutes(app, auth);
     registerServerRoutes(app, auth, servers);
     registerConnectionRoutes(app, auth, servers, connectionManager);
-    registerFilesRoutes(app, auth, servers, config.filesRoot);
+    registerFilesRoutes(app, auth, servers, config.filesRoot, sftpSessions);
     registerAuditRoutes(app, auth, registry);
     await plugins.start();
 

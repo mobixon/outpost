@@ -49,7 +49,7 @@ async function guard<T>(action: () => Promise<T>): Promise<T> {
   }
 }
 
-const tooLarge = () =>
+export const tooLarge = () =>
   new HttpError(
     413,
     'file_too_large',
@@ -189,7 +189,7 @@ export class FolderFiles {
 }
 
 /** `level-name` and `online-mode` from `server.properties`, to show which server was found. */
-function describeProperties(text: string): string | null {
+export function describeProperties(text: string): string | null {
   const wanted = ['level-name', 'online-mode'];
   const found = text
     .split(/\r?\n/)
@@ -253,5 +253,5 @@ export async function testFolder(
     current.ok = false;
     current.error = mapped instanceof HttpError ? mapped.code : 'internal_error';
   }
-  return { ok: steps.every((entry) => entry.ok === true), steps };
+  return { ok: steps.every((entry) => entry.ok === true), steps, hostKey: null };
 }

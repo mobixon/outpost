@@ -20,6 +20,7 @@ import type { AuthContext, AuthService } from '../auth/service.js';
 import type { UserRow } from '../auth/users.js';
 import type { CoreTables, ServersTable } from '../db/schema.js';
 import type { FilesSettings } from '../files/access.js';
+import type { SftpTarget } from '../files/sftp.js';
 import type { PermissionRegistry } from '../rbac/permissions.js';
 
 export type ServerRow = Selectable<ServersTable>;
@@ -33,13 +34,31 @@ const storedConnectionSchema = z.object({
 });
 export type StoredConnection = z.infer<typeof storedConnectionSchema>;
 
-const storedFilesSchema = z.object({
-  source: z.literal('folder'),
-  /** Relative to OUTPOST_FILES_ROOT. */
-  path: z.string(),
-  writable: z.boolean(),
-});
+const storedFilesSchema = z.discriminatedUnion('source', [
+  z.object({
+    source: z.literal('folder'),
+    /** Relative to OUTPOST_FILES_ROOT. */
+    path: z.string(),
+    writable: z.boolean(),
+  }),
+  z.object({
+    source: z.literal('sftp'),
+    host: z.string(),
+    port: z.number().int(),
+    username: z.string(),
+    auth: z.enum(['password', 'key']),
+    /** The password or the private key, sealed with the key for server connections. */
+    secret: z.string(),
+    /** The sealed passphrase of the private key. */
+    passphrase: z.string().nullable(),
+    path: z.string(),
+    writable: z.boolean(),
+    /** The pinned fingerprint of the host key. */
+    hostKey: z.string(),
+  }),
+]);
 type StoredFiles = z.infer<typeof storedFilesSchema>;
+type SftpInput = Extract<FilesInput, { source: 'sftp' }>;
 
 export interface RconSettings {
   host: string;
@@ -264,12 +283,82 @@ export class ServerService {
     };
   }
 
+  /** The Files connector without its secrets. */
   filesInfo(server: ServerRow): FilesInfo | null {
-    return this.filesOf(server);
+    const files = this.filesOf(server);
+    if (files?.source !== 'sftp') return files;
+    return {
+      source: 'sftp',
+      host: files.host,
+      port: files.port,
+      username: files.username,
+      auth: files.auth,
+      path: files.path,
+      writable: files.writable,
+      hostKey: files.hostKey,
+    };
   }
 
-  async saveFiles(id: string, input: FilesInput): Promise<void> {
-    const files: StoredFiles = { source: input.source, path: input.path, writable: input.writable };
+  /**
+   * Entered SFTP settings as a target. While host, port and username stay the same, the stored
+   * password or key (for the same login method) and the pinned host key are kept.
+   */
+  sftpTarget(server: ServerRow, input: SftpInput): SftpTarget {
+    const files = this.filesOf(server);
+    const stored =
+      files?.source === 'sftp' &&
+      files.host === input.host &&
+      files.port === input.port &&
+      files.username === input.username
+        ? files
+        : undefined;
+    let secret = input.secret;
+    let passphrase = input.passphrase;
+    if (secret === undefined && stored !== undefined && stored.auth === input.auth) {
+      secret = this.#secrets.open(stored.secret);
+      passphrase = stored.passphrase === null ? undefined : this.#secrets.open(stored.passphrase);
+    }
+    if (secret === undefined) {
+      throw new HttpError(400, 'sftp_secret_required', 'Enter the password or the private key');
+    }
+    return {
+      host: input.host,
+      port: input.port,
+      username: input.username,
+      auth: input.auth,
+      secret,
+      passphrase,
+      path: input.path,
+      hostKey: input.hostKey ?? stored?.hostKey,
+    };
+  }
+
+  /** Stores the Files connector; SFTP needs the tested target with its pinned host key. */
+  async saveFiles(id: string, input: FilesInput, sftp?: SftpTarget): Promise<void> {
+    let files: StoredFiles;
+    if (input.source === 'folder') {
+      files = { source: 'folder', path: input.path, writable: input.writable };
+    } else {
+      if (sftp?.hostKey === undefined) {
+        throw new HttpError(
+          400,
+          'host_key_required',
+          'Test the connection and confirm the host key',
+        );
+      }
+      files = {
+        source: 'sftp',
+        host: sftp.host,
+        port: sftp.port,
+        username: sftp.username,
+        auth: sftp.auth,
+        secret: this.#secrets.seal(sftp.secret),
+        passphrase: sftp.passphrase === undefined ? null : this.#secrets.seal(sftp.passphrase),
+        path: sftp.path,
+        writable: input.writable,
+        hostKey: sftp.hostKey,
+      };
+    }
     await this.db
       .updateTable('servers')
       .set({ files: JSON.stringify(files), updated_at: Date.now() })
@@ -285,11 +374,28 @@ export class ServerService {
       .execute();
   }
 
-  /** The folder of the server for `ctx.files`; undefined without a Files connector. */
+  /** The Files connector of the server for `ctx.files`; undefined without one. */
   async filesSettings(serverId: string): Promise<FilesSettings | undefined> {
     const server = await this.find(serverId);
     const files = server === undefined ? null : this.filesOf(server);
-    return files === null ? undefined : { path: files.path, writable: files.writable };
+    if (files === null) return undefined;
+    if (files.source === 'folder') {
+      return { source: 'folder', path: files.path, writable: files.writable };
+    }
+    return {
+      source: 'sftp',
+      writable: files.writable,
+      target: {
+        host: files.host,
+        port: files.port,
+        username: files.username,
+        auth: files.auth,
+        secret: this.#secrets.open(files.secret),
+        passphrase: files.passphrase === null ? undefined : this.#secrets.open(files.passphrase),
+        path: files.path,
+        hostKey: files.hostKey,
+      },
+    };
   }
 
   info(server: ServerRow): ServerInfo {

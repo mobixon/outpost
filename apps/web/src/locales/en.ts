@@ -273,6 +273,16 @@ export default {
     file_too_large: 'The file is too large.',
     invalid_path: 'The path is not valid.',
     path_outside_folder: 'The path leads outside the folder of the server.',
+    files_error: 'The file operation failed.',
+    login_failed: 'The login was refused: check the username and the password or key.',
+    invalid_private_key:
+      'The private key cannot be read: paste it in OpenSSH or PEM format and enter its passphrase if it has one.',
+    sftp_unavailable: 'The server does not offer SFTP.',
+    sftp_secret_required: 'Enter the password or the private key.',
+    ssh_error: 'The server answered in an unexpected way. Is this an SSH port?',
+    host_key_mismatch:
+      'The host key differs from the pinned one. If your host really changed its key, save again to pin the new key.',
+    host_key_required: 'Test the connection first to see and confirm the host key.',
   },
   home: {
     title: 'Game servers',
@@ -355,18 +365,38 @@ export default {
       source: 'Source',
       folder: 'Folder mounted into Outpost',
       sftp: 'SFTP',
-      later: 'coming later',
+      host: 'Host',
+      port: 'Port',
+      username: 'Username',
+      auth: 'Log in with',
+      authPassword: 'Password',
+      authKey: 'Private key',
+      password: 'Password',
+      privateKey: 'Private key',
+      privateKeyHint:
+        'OpenSSH or PEM format. It is encrypted with OUTPOST_SECRET_KEY and never shown again.',
+      passphrase: 'Passphrase of the key (if it has one)',
+      secretKept: 'Saved; enter a new one to change it',
+      remotePath: 'Folder on the SFTP server',
+      remotePathHint:
+        'The data folder of the game server, where server.properties lies, e.g. / or /minecraft.',
+      hostKey: 'Host key',
+      hostKeyHint:
+        'Compare it with the fingerprint your host shows. Saving pins this key, and Outpost refuses to connect if it changes.',
+      hostKeyChanged: 'This is not the pinned key. Save only if the host really changed its key.',
       path: 'Folder',
       pathHint:
         'The data folder of the game server, mounted into the Outpost container below {root}. Docker Compose: the volume of the game server at {root}/<name>. CapRover: a persistent directory with the host path of the game server.',
       writable: 'Allow writing',
       writableHint:
-        'Modules may change files. Outpost must run as the owner of the files (UID); itzg/minecraft-server and Outpost both use UID 1000.',
+        'Modules may change files. The test checks that files written by Outpost get the owner (UID) of the files of the server; itzg/minecraft-server and Outpost both use UID 1000.',
       test: 'Test',
       save: 'Save',
       saved: 'The file access was saved.',
       remove: 'Disconnect',
       steps: {
+        connect: 'Connect and check the host key',
+        auth: 'Log in and open SFTP',
         folder: 'Find the folder',
         properties: 'Read server.properties',
         write: 'Write a test file',

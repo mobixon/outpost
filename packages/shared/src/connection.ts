@@ -89,33 +89,83 @@ const folderSchema = z
     message: 'Must not contain . or .. segments',
   });
 
-/** Where the files of a server come from: `folder` is a directory mounted into Outpost. */
-export const FILE_SOURCES = ['folder'] as const;
+/** An absolute folder on an SFTP server, e.g. `/` or `/minecraft`. */
+const remoteFolderSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(1024)
+  .regex(/^\/[^\0\\]*$/)
+  .refine((path) => path.split('/').every((segment) => segment !== '..'), {
+    message: 'Must not contain .. segments',
+  });
 
-export const filesInputSchema = z.object({
-  source: z.enum(FILE_SOURCES),
-  /** The server's folder, relative to OUTPOST_FILES_ROOT. */
-  path: folderSchema,
-  /** Modules may write files; the test checks that writing works. */
-  writable: z.boolean(),
-});
+/** Where the files of a server come from: a folder mounted into Outpost, or an SFTP server. */
+export const FILE_SOURCES = ['folder', 'sftp'] as const;
+export type FileSource = (typeof FILE_SOURCES)[number];
+
+export const SFTP_DEFAULT_PORT = 22;
+export const SFTP_AUTH_METHODS = ['password', 'key'] as const;
+
+/** Fingerprint of an SSH host key as OpenSSH shows it: `SHA256:` and 43 base64 characters. */
+export const HOST_KEY_PATTERN = /^SHA256:[A-Za-z0-9+/]{43}$/;
+
+export const filesInputSchema = z.discriminatedUnion('source', [
+  z.object({
+    source: z.literal('folder'),
+    /** The server's folder, relative to OUTPOST_FILES_ROOT. */
+    path: folderSchema,
+    /** Modules may write files; the test checks that writing works. */
+    writable: z.boolean(),
+  }),
+  z.object({
+    source: z.literal('sftp'),
+    host: hostSchema,
+    port: z.number().int().min(1).max(65535),
+    username: z.string().trim().min(1).max(128),
+    auth: z.enum(SFTP_AUTH_METHODS),
+    /** The password, or the private key in OpenSSH or PEM format; omit to keep the stored one. */
+    secret: z.string().min(1).max(16_384).optional(),
+    /** Passphrase of a new private key. */
+    passphrase: z.string().min(1).max(1024).optional(),
+    /** The server's folder on the SFTP server. */
+    path: remoteFolderSchema,
+    writable: z.boolean(),
+    /** The host key fingerprint shown by the test; saving pins it. Omit to keep the pinned one. */
+    hostKey: z.string().regex(HOST_KEY_PATTERN).optional(),
+  }),
+]);
 export type FilesInput = z.infer<typeof filesInputSchema>;
 
-export const filesInfoSchema = z.object({
-  source: z.enum(FILE_SOURCES),
-  path: z.string(),
-  writable: z.boolean(),
-});
+/** The Files connector as the API shows it; passwords and keys never leave the server. */
+export const filesInfoSchema = z.discriminatedUnion('source', [
+  z.object({ source: z.literal('folder'), path: z.string(), writable: z.boolean() }),
+  z.object({
+    source: z.literal('sftp'),
+    host: z.string(),
+    port: z.number().int(),
+    username: z.string(),
+    auth: z.enum(SFTP_AUTH_METHODS),
+    path: z.string(),
+    writable: z.boolean(),
+    /** The pinned fingerprint of the host key. */
+    hostKey: z.string(),
+  }),
+]);
 export type FilesInfo = z.infer<typeof filesInfoSchema>;
 
 export const filesStateSchema = z.object({
-  /** OUTPOST_FILES_ROOT: the folders of the servers lie below it. */
+  /** OUTPOST_FILES_ROOT: the mounted folders of the servers lie below it. */
   root: z.string(),
   files: filesInfoSchema.nullable(),
 });
 
-export const FILES_TEST_STEPS = ['folder', 'properties', 'write'] as const;
-export const filesTestResultSchema = testResultSchema(FILES_TEST_STEPS);
+/** SFTP runs all steps; a mounted folder starts at `folder`. */
+export const FILES_TEST_STEPS = ['connect', 'auth', 'folder', 'properties', 'write'] as const;
+export const filesTestResultSchema = testResultSchema(FILES_TEST_STEPS).extend({
+  /** SFTP: the fingerprint of the host key the server presented; null otherwise. */
+  hostKey: z.string().nullable(),
+});
 export type FilesTestResult = z.infer<typeof filesTestResultSchema>;
 
 export const serverStatusSchema = z.object({
