@@ -1,20 +1,28 @@
+import { API_PREFIX, THEME_MODES, type ThemeMode } from '@outpost/shared';
+import { apiSend } from '@outpost/web-plugin-api';
 import { ref, watch } from 'vue';
 
-export type ThemeMode = 'light' | 'dark' | 'system';
+export type { ThemeMode };
 
 const STORAGE_KEY = 'outpost.theme';
+
+export const isThemeMode = (value: unknown): value is ThemeMode =>
+  (THEME_MODES as readonly unknown[]).includes(value);
 
 function readStoredMode(): ThemeMode {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
+    if (isThemeMode(stored)) return stored;
   } catch {
     // Storage unavailable: fall back to the system setting.
   }
   return 'system';
 }
 
-/** The user's theme choice; `system` follows the operating system setting. */
+/**
+ * The theme choice; `system` follows the operating system setting. The browser remembers it, also
+ * on the pages before login; signed-in users also keep it in their account.
+ */
 export const themeMode = ref<ThemeMode>(readStoredMode());
 
 /** Applies the theme to the page and keeps it in sync with the choice and the OS setting. */
@@ -34,4 +42,14 @@ export function initThemeMode(): void {
     }
     apply();
   });
+}
+
+/** Takes over the theme saved in the account of the signed-in user, if there is one. */
+export function adoptAccountTheme(theme: ThemeMode | null | undefined): void {
+  if (theme !== null && theme !== undefined) themeMode.value = theme;
+}
+
+/** Saves the choice in the account; the browser remembers it even when this fails. */
+export async function saveAccountTheme(theme: ThemeMode): Promise<void> {
+  await apiSend('PUT', `${API_PREFIX}/me/theme`, { theme });
 }

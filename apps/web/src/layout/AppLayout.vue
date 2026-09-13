@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MenuIcon, MonitorIcon, MoonIcon, SunIcon, TriangleAlertIcon } from '@lucide/vue';
+import { MenuIcon, TriangleAlertIcon } from '@lucide/vue';
 import {
   Alert,
   AlertDescription,
@@ -14,8 +14,6 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  ToggleGroup,
-  ToggleGroupItem,
 } from '@outpost/ui';
 import { onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -24,10 +22,11 @@ import SudoDialog from '../account/SudoDialog.vue';
 import { storeLocale, SUPPORTED_LOCALES, type AppLocale } from '../i18n.js';
 import { loadServers } from '../servers.js';
 import { useShell } from '../shell.js';
-import { themeMode, type ThemeMode } from '../theme/mode.js';
+import { saveAccountTheme, type ThemeMode } from '../theme/mode.js';
 import FlashMessage from './FlashMessage.vue';
 import NavList from './NavList.vue';
 import ServerNav from './ServerNav.vue';
+import ThemeToggle from './ThemeToggle.vue';
 import UserMenu from './UserMenu.vue';
 
 const shell = useShell();
@@ -50,15 +49,9 @@ watch(
   },
 );
 
-const themeOptions = [
-  { value: 'light', icon: SunIcon },
-  { value: 'system', icon: MonitorIcon },
-  { value: 'dark', icon: MoonIcon },
-] as const satisfies readonly { value: ThemeMode; icon: unknown }[];
-
-function setTheme(value: unknown): void {
-  // A single-choice toggle group emits an empty value when the active item is clicked again.
-  if (themeOptions.some((option) => option.value === value)) themeMode.value = value as ThemeMode;
+/** Signed in, the theme is also saved in the account; the browser remembers it anyway. */
+function saveTheme(mode: ThemeMode): void {
+  saveAccountTheme(mode).catch(() => undefined);
 }
 
 function setLocale(value: unknown): void {
@@ -113,24 +106,7 @@ function setLocale(value: unknown): void {
         </Button>
         <span class="font-semibold lg:hidden">{{ t('app.name') }}</span>
         <div class="flex-1" />
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          :model-value="themeMode"
-          :aria-label="t('theme.label')"
-          @update:model-value="setTheme"
-        >
-          <ToggleGroupItem
-            v-for="option in themeOptions"
-            :key="option.value"
-            :value="option.value"
-            :aria-label="t(`theme.${option.value}`)"
-            :title="t(`theme.${option.value}`)"
-          >
-            <component :is="option.icon" />
-          </ToggleGroupItem>
-        </ToggleGroup>
+        <ThemeToggle @change="saveTheme" />
         <Select :model-value="locale" @update:model-value="setLocale">
           <SelectTrigger size="sm" class="w-32" :aria-label="t('locale.label')">
             <SelectValue />

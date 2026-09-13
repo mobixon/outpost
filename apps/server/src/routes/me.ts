@@ -6,6 +6,7 @@ import {
   identityListSchema,
   passwordChangeRequestSchema,
   sessionListSchema,
+  themeRequestSchema,
   twoFactorSetupSchema,
   verificationRequestSchema,
 } from '@outpost/shared';
@@ -38,6 +39,17 @@ export function registerMeRoutes(fastify: FastifyInstance, auth: AuthService): v
     const { user } = auth.requireUser(request, { allowEnrollment: true });
     return toCurrentUser(auth.db, user);
   });
+
+  // A display preference, so neither sudo mode nor an audit entry.
+  app.put(
+    `${base}/theme`,
+    { schema: { tags, body: themeRequestSchema } },
+    async (request, reply) => {
+      const { user } = auth.requireUser(request, { allowEnrollment: true });
+      await updateUser(auth.db, user.id, { theme: request.body.theme });
+      return reply.code(204).send();
+    },
+  );
 
   app.post(
     `${base}/password`,

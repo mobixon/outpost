@@ -54,6 +54,7 @@ describe('redirectFor with invitations, external logins and administration', () 
     hasPassword: true,
     twoFactorEnabled: false,
     backupCodesLeft: 0,
+    theme: null,
     createdAt: '2026-01-01T00:00:00.000Z',
   });
 

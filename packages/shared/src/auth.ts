@@ -15,6 +15,11 @@ const passwordInputSchema = z.string().min(1).max(PASSWORD_MAX_LENGTH);
 /** A 6-digit authenticator code or a backup code. */
 const verificationCodeSchema = z.string().trim().min(6).max(32);
 
+/** `system` follows the setting of the operating system. */
+export const THEME_MODES = ['light', 'dark', 'system'] as const;
+export const themeModeSchema = z.enum(THEME_MODES);
+export type ThemeMode = z.infer<typeof themeModeSchema>;
+
 export const currentUserSchema = z.object({
   id: z.string(),
   username: z.string(),
@@ -23,9 +28,13 @@ export const currentUserSchema = z.object({
   hasPassword: z.boolean(),
   twoFactorEnabled: z.boolean(),
   backupCodesLeft: z.number().int(),
+  /** The theme saved in the account, so it follows the user to every device; null until chosen. */
+  theme: themeModeSchema.nullable(),
   createdAt: z.string(),
 });
 export type CurrentUser = z.infer<typeof currentUserSchema>;
+
+export const themeRequestSchema = z.object({ theme: themeModeSchema });
 
 /** An external login provider (GitHub or an OpenID Connect provider). */
 export const providerInfoSchema = z.object({

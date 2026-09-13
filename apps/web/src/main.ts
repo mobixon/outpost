@@ -7,11 +7,13 @@ import { loadEnabledPlugins } from './plugins.js';
 import { createAppRouter } from './router.js';
 import { loadSession } from './session.js';
 import { buildNavItems, buildServerTabs, shellKey } from './shell.js';
-import { initThemeMode } from './theme/mode.js';
+import { adoptAccountTheme, initThemeMode } from './theme/mode.js';
 
 async function bootstrap(): Promise<void> {
   initThemeMode();
   const session = await loadSession();
+  // The theme saved in the account wins over the one this browser remembers.
+  adoptAccountTheme(session?.user?.theme);
   const signedIn = session?.status === 'active' && !session.twoFactorEnrollmentRequired;
   const plugins = signedIn ? await loadEnabledPlugins() : [];
 
