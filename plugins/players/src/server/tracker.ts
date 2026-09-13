@@ -11,7 +11,7 @@ const modeStateSchema = z.object({
   detected: serverModeSchema.nullable(),
   override: serverModeSchema.nullable(),
 });
-export type ModeState = z.infer<typeof modeStateSchema> & { effective: ServerMode | null };
+export type ModeState = z.infer<typeof modeStateSchema>;
 
 /**
  * Follows who is online: every poll runs `list uuids` and records joins and leaves, so the times
@@ -153,11 +153,11 @@ export class PlayerTracker {
     return reply;
   }
 
+  /** The mode shown by the players online and the one set by hand. */
   async mode(serverId: string): Promise<ModeState> {
-    const state = modeStateSchema
+    return modeStateSchema
       .catch({ detected: null, override: null })
       .parse(await this.ctx.kv.get(`mode:${serverId}`));
-    return { ...state, effective: state.override ?? state.detected };
   }
 
   async setOverride(serverId: string, override: ServerMode | null): Promise<void> {

@@ -7,15 +7,19 @@ export default {
     since: 'online since {time}',
     refresh: 'Refresh',
     unreachable: 'The server does not answer; the lists show what is known.',
+    noRcon: 'Connect RCON to see who is online and to kick, ban and make operators.',
     mode: {
       label: 'Server mode',
       online: 'Online mode',
       offline: 'Offline mode',
       unknown: 'Mode unknown',
       detected: 'detected',
+      configured: 'from server.properties',
       manual: 'set by hand',
       auto: 'Detect automatically',
-      hint: 'Detected from the UUIDs of the players online. On offline-mode servers bans and operator rights for players not seen yet wait until they join, and whitelisting them shows a warning.',
+      hint: 'Set by hand, else detected from the UUIDs of the players online, else read from server.properties. On offline-mode servers bans and operator rights for players not seen yet wait until they join.',
+      mismatch:
+        'server.properties and the UUIDs of the players online disagree (a proxy such as Velocity?): Outpost goes by the players.',
     },
     actions: {
       title: 'Player actions',
@@ -34,14 +38,43 @@ export default {
       'This player has not been seen on this offline-mode server yet. The action runs as soon as they come online.',
     warningOffline:
       'This player has not been seen on this offline-mode server yet. Minecraft may have stored the wrong UUID, so they may not be able to join: let them join once with the whitelist off.',
+    warningRestart:
+      'The server loads the whitelist when it starts next: connect RCON to apply changes at once.',
     noReply: 'Done.',
     whitelist: {
       title: 'Whitelist',
       empty: 'Nobody is whitelisted.',
       on: 'Turn on',
       off: 'Turn off',
+      isOn: 'On',
+      isOff: 'Off',
       remove: 'Remove {name}',
-      hint: 'Whether the whitelist is on cannot be read over RCON.',
+      hint: 'Whether the whitelist is on cannot be read over RCON. Connect the files of the server to see it and to whitelist players with the right UUIDs.',
+      file: 'Outpost edits whitelist.json and makes the server reload it. On offline-mode servers it writes the UUIDs of the names itself, so type names exactly as the players spell them.',
+      fileNoRcon:
+        'Outpost edits whitelist.json; without RCON the server loads it when it starts next. On offline-mode servers it writes the UUIDs of the names itself, so type names exactly as the players spell them.',
+      readOnlyFiles:
+        'The list is read from whitelist.json; writing files is off, so changes go over RCON.',
+      readOnly:
+        'The list is read from whitelist.json. To change it, connect RCON or allow writing files.',
+      unreadable: 'whitelist.json could not be read.',
+      wrongUuid: 'Wrong UUID {uuid}: this player cannot join',
+      doctor: {
+        fixable:
+          'Entries with a UUID that does not fit this offline-mode server: {count}. These players cannot join.',
+        online:
+          'Entries with offline UUIDs on this online-mode server: {count}. Remove them and add them again.',
+        readOnly:
+          'Entries with a UUID that does not fit this offline-mode server: {count}. Allow writing files to let Outpost fix them.',
+        fix: 'Fix UUIDs',
+      },
+    },
+    errors: {
+      rcon_required:
+        'Adding players to the whitelist of an online-mode server needs RCON: the server looks their UUID up at Mojang.',
+      not_whitelisted: 'This player is not on the whitelist.',
+      whitelist_invalid: 'whitelist.json is not a list of players; fix it on the server first.',
+      not_offline: 'Only whitelists of offline-mode servers can be fixed.',
     },
     bans: {
       title: 'Bans',

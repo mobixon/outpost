@@ -10,3 +10,14 @@ export interface FileStat {
 export interface FileEntry extends FileStat {
   name: string;
 }
+
+/**
+ * The files of a game server a module may use through `ctx.files`, as paths relative to the
+ * server's folder: `*` stands for any part of one name (`world/stats/*.json`) and `**` for any
+ * number of folders (`logs/**`). Paths in `write` may also be read. A module without scopes cannot
+ * use `ctx.files`.
+ */
+export interface FileScopes {
+  read?: readonly string[];
+  write?: readonly string[];
+}

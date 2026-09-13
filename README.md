@@ -24,8 +24,9 @@ two-factor login and an audit log.
 ## Why Outpost
 
 - **Made for Minecraft.** A console with command completion and a command history kept in your
-  account; players online, history, whitelist, bans, kicks and operators, aware of offline-mode
-  servers; scheduled commands and rotating chat announcements.
+  account; players online, history, bans, kicks and operators, aware of offline-mode servers; a
+  whitelist that gets the UUIDs right, with a doctor for broken entries; scheduled commands and
+  rotating chat announcements.
 - **Live log.** The console shows the server log as the server writes it, coloured by level, and
   picks up where it left off after a lost connection. Viewers never see it, since it holds the
   chat and the IP addresses of the players.
@@ -112,9 +113,9 @@ instead. A domain with HTTPS, a reverse proxy, CapRover, updates and backups are
 - [Configuration](docs/configuration.md) — all settings
 - [Authentication](docs/authentication.md) — accounts, 2FA, invitations, GitHub and OIDC login
 - [Servers, connections, roles and modules](docs/servers.md)
-- [Roadmap](docs/PLAN.md#18-roadmap-after-v01) — more modules on top of the files (offline-mode
-  whitelist, settings editor), backups, mods from Modrinth, restarts with warnings, statistics and
-  more
+- [Roadmap](docs/PLAN.md#18-roadmap-after-v01) — more modules on top of the files (settings
+  editor, player history from the log), backups, mods from Modrinth, restarts with warnings,
+  statistics and more
 
 ## Development
 

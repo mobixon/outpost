@@ -6,6 +6,7 @@ import {
   RefreshCwIcon,
   Trash2Icon,
   UndoIcon,
+  WrenchIcon,
 } from '@lucide/vue';
 import { CorePermission, serverPluginApiPath } from '@outpost/shared';
 import {
@@ -78,8 +79,8 @@ const loading = ref(false);
 
 function describeError(err: unknown): string {
   if (err instanceof ApiError) {
-    const key = `errors.${err.code}`;
-    return te(key) ? t(key) : err.message;
+    const key = [`players.errors.${err.code}`, `errors.${err.code}`].find((name) => te(name));
+    return key === undefined ? err.message : t(key);
   }
   return te('errors.network') ? t('errors.network') : String(err);
 }
@@ -120,7 +121,11 @@ async function run(path: string, body: object): Promise<void> {
     const result = await apiSend('POST', url(path), body, actionResultSchema);
     if (result.pending) message.value = { kind: 'info', text: t('players.pendingCreated') };
     else if (result.warning !== null) {
-      message.value = { kind: 'warning', text: `${result.reply} ${t('players.warningOffline')}` };
+      const note =
+        result.warning === 'applies_on_restart'
+          ? t('players.warningRestart')
+          : t('players.warningOffline');
+      message.value = { kind: 'warning', text: `${result.reply} ${note}`.trim() };
     } else message.value = { kind: 'info', text: result.reply || t('players.noReply') };
     await refresh();
   } catch (err) {
@@ -173,10 +178,53 @@ async function openPlayer(uuid: string): Promise<void> {
 const modeLabel = computed(() => {
   const mode = overview.value?.mode;
   if (!mode?.effective) return t('players.mode.unknown');
-  const source = mode.override ? t('players.mode.manual') : t('players.mode.detected');
-  return `${t(`players.mode.${mode.effective}`)} · ${source}`;
+  const source = mode.override ? 'manual' : mode.detected ? 'detected' : 'configured';
+  return `${t(`players.mode.${mode.effective}`)} · ${t(`players.mode.${source}`)}`;
 });
 const modeValue = computed(() => overview.value?.mode.override ?? 'auto');
+/** server.properties and the players online disagree, e.g. behind a proxy. */
+const modeMismatch = computed(() => {
+  const mode = overview.value?.mode;
+  return (
+    !!mode &&
+    mode.override === null &&
+    mode.detected !== null &&
+    mode.configured !== null &&
+    mode.detected !== mode.configured
+  );
+});
+
+/** How the whitelist is changed: in whitelist.json, over RCON, or not at all. */
+const whitelistChange = computed(
+  () => overview.value?.whitelist?.change ?? (overview.value?.rcon ? 'rcon' : null),
+);
+const whitelistHint = computed(() => {
+  const list = overview.value?.whitelist;
+  if (list?.change === 'file') {
+    return list.reloads ? t('players.whitelist.file') : t('players.whitelist.fileNoRcon');
+  }
+  if (list?.source === 'file') {
+    return list.change === 'rcon'
+      ? t('players.whitelist.readOnlyFiles')
+      : t('players.whitelist.readOnly');
+  }
+  return t('players.whitelist.hint');
+});
+const whitelistErrorText = computed(() => {
+  const code = overview.value?.whitelistError;
+  if (!code) return null;
+  const key = `players.errors.${code}`;
+  return te(key) ? t(key) : t('players.whitelist.unreadable');
+});
+const wrongCount = computed(
+  () => overview.value?.whitelist?.entries.filter((entry) => entry.wrongUuid).length ?? 0,
+);
+const doctorText = computed(() => {
+  let key = 'readOnly';
+  if (overview.value?.whitelist?.fixable) key = 'fixable';
+  else if (overview.value?.mode.effective === 'online') key = 'online';
+  return t(`players.whitelist.doctor.${key}`, { count: wrongCount.value });
+});
 
 const formatTime = (iso: string | null) =>
   iso === null
@@ -214,6 +262,9 @@ onUnmounted(() => clearInterval(timer));
           <SelectItem value="offline">{{ t('players.mode.offline') }}</SelectItem>
         </SelectContent>
       </Select>
+      <span v-if="modeMismatch" class="text-muted-foreground text-xs">
+        {{ t('players.mode.mismatch') }}
+      </span>
       <div class="flex-1" />
       <Button variant="ghost" size="sm" :disabled="loading" @click="refresh">
         <RefreshCwIcon :class="{ 'animate-spin': loading }" />
@@ -234,11 +285,15 @@ onUnmounted(() => clearInterval(timer));
       <CircleAlertIcon />
       <AlertDescription>{{ t('players.unreachable') }}</AlertDescription>
     </Alert>
+    <Alert v-if="overview && !overview.rcon">
+      <InfoIcon />
+      <AlertDescription>{{ t('players.noRcon') }}</AlertDescription>
+    </Alert>
 
     <div v-if="overview === null" class="flex justify-center py-8"><Spinner class="size-6" /></div>
 
     <template v-else>
-      <Card>
+      <Card v-if="overview.rcon">
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             {{ t('players.online') }}
@@ -324,10 +379,11 @@ onUnmounted(() => clearInterval(timer));
 
       <Card
         v-if="
-          can(PlayersPermission.kick) ||
-          can(PlayersPermission.ban) ||
-          can(PlayersPermission.whitelist) ||
-          can(PlayersPermission.op)
+          (overview.rcon &&
+            (can(PlayersPermission.kick) ||
+              can(PlayersPermission.ban) ||
+              can(PlayersPermission.op))) ||
+          (can(PlayersPermission.whitelist) && whitelistChange !== null)
         "
       >
         <CardHeader>
@@ -353,7 +409,7 @@ onUnmounted(() => clearInterval(timer));
           </FieldGroup>
           <div class="flex flex-wrap gap-2">
             <Button
-              v-if="can(PlayersPermission.kick)"
+              v-if="overview.rcon && can(PlayersPermission.kick)"
               variant="outline"
               :disabled="busy || !form.name.trim()"
               @click="withName('/kick', undefined, form.reason)"
@@ -361,7 +417,7 @@ onUnmounted(() => clearInterval(timer));
               {{ t('players.actions.kick') }}
             </Button>
             <Button
-              v-if="can(PlayersPermission.ban)"
+              v-if="overview.rcon && can(PlayersPermission.ban)"
               variant="outline"
               :disabled="busy || !form.name.trim()"
               @click="withName('/ban', undefined, form.reason)"
@@ -369,7 +425,7 @@ onUnmounted(() => clearInterval(timer));
               {{ t('players.actions.ban') }}
             </Button>
             <Button
-              v-if="can(PlayersPermission.ban)"
+              v-if="overview.rcon && can(PlayersPermission.ban)"
               variant="outline"
               :disabled="busy || !form.name.trim()"
               @click="withName('/pardon')"
@@ -377,7 +433,7 @@ onUnmounted(() => clearInterval(timer));
               {{ t('players.actions.pardon') }}
             </Button>
             <Button
-              v-if="can(PlayersPermission.whitelist)"
+              v-if="can(PlayersPermission.whitelist) && whitelistChange !== null"
               variant="outline"
               :disabled="busy || !form.name.trim()"
               @click="withName('/whitelist/add')"
@@ -385,7 +441,7 @@ onUnmounted(() => clearInterval(timer));
               {{ t('players.actions.whitelistAdd') }}
             </Button>
             <Button
-              v-if="can(PlayersPermission.whitelist)"
+              v-if="can(PlayersPermission.whitelist) && whitelistChange !== null"
               variant="outline"
               :disabled="busy || !form.name.trim()"
               @click="withName('/whitelist/remove')"
@@ -393,7 +449,7 @@ onUnmounted(() => clearInterval(timer));
               {{ t('players.actions.whitelistRemove') }}
             </Button>
             <Button
-              v-if="can(PlayersPermission.op)"
+              v-if="overview.rcon && can(PlayersPermission.op)"
               variant="outline"
               :disabled="busy || !form.name.trim()"
               @click="withName('/op')"
@@ -401,7 +457,7 @@ onUnmounted(() => clearInterval(timer));
               {{ t('players.actions.op') }}
             </Button>
             <Button
-              v-if="can(PlayersPermission.op)"
+              v-if="overview.rcon && can(PlayersPermission.op)"
               variant="outline"
               :disabled="busy || !form.name.trim()"
               @click="withName('/deop')"
@@ -442,11 +498,50 @@ onUnmounted(() => clearInterval(timer));
       <div class="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>{{ t('players.whitelist.title') }}</CardTitle>
-            <CardDescription>{{ t('players.whitelist.hint') }}</CardDescription>
+            <CardTitle class="flex items-center gap-2">
+              {{ t('players.whitelist.title') }}
+              <Badge
+                v-if="overview.whitelist && overview.whitelist.enabled !== null"
+                :variant="overview.whitelist.enabled ? 'default' : 'secondary'"
+                data-testid="players-whitelist-state"
+              >
+                {{
+                  overview.whitelist.enabled
+                    ? t('players.whitelist.isOn')
+                    : t('players.whitelist.isOff')
+                }}
+              </Badge>
+            </CardTitle>
+            <CardDescription>{{ whitelistHint }}</CardDescription>
           </CardHeader>
           <CardContent class="flex flex-col gap-4">
-            <p v-if="overview.whitelist?.length === 0" class="text-muted-foreground text-sm">
+            <p v-if="whitelistErrorText" class="text-destructive text-sm">
+              {{ whitelistErrorText }}
+            </p>
+            <Alert
+              v-if="wrongCount > 0"
+              variant="destructive"
+              data-testid="players-whitelist-doctor"
+            >
+              <CircleAlertIcon />
+              <AlertDescription class="flex flex-col items-start gap-2">
+                {{ doctorText }}
+                <Button
+                  v-if="overview.whitelist?.fixable && can(PlayersPermission.whitelist)"
+                  size="sm"
+                  variant="outline"
+                  :disabled="busy"
+                  @click="run('/whitelist/fix', {})"
+                >
+                  <WrenchIcon />
+                  {{ t('players.whitelist.doctor.fix') }}
+                </Button>
+              </AlertDescription>
+            </Alert>
+            <p
+              v-if="overview.whitelist?.entries.length === 0"
+              class="text-muted-foreground text-sm"
+            >
               {{ t('players.whitelist.empty') }}
             </p>
             <ul
@@ -454,24 +549,36 @@ onUnmounted(() => clearInterval(timer));
               class="flex flex-wrap gap-2"
               data-testid="players-whitelist"
             >
-              <li v-for="name in overview.whitelist" :key="name">
-                <Badge variant="secondary" class="gap-1 font-mono">
-                  {{ name }}
+              <li v-for="entry in overview.whitelist.entries" :key="entry.uuid ?? entry.name">
+                <Badge
+                  :variant="entry.wrongUuid ? 'destructive' : 'secondary'"
+                  class="gap-1 font-mono"
+                  :title="
+                    entry.wrongUuid
+                      ? t('players.whitelist.wrongUuid', { uuid: entry.uuid })
+                      : (entry.uuid ?? undefined)
+                  "
+                >
+                  {{ entry.name }}
                   <button
-                    v-if="can(PlayersPermission.whitelist)"
+                    v-if="can(PlayersPermission.whitelist) && whitelistChange !== null"
                     type="button"
                     class="hover:text-destructive"
-                    :aria-label="t('players.whitelist.remove', { name })"
+                    :aria-label="t('players.whitelist.remove', { name: entry.name })"
                     :disabled="busy"
-                    @click="withName('/whitelist/remove', name)"
+                    @click="withName('/whitelist/remove', entry.name)"
                   >
                     <Trash2Icon class="size-3" />
                   </button>
                 </Badge>
               </li>
             </ul>
-            <div v-if="can(PlayersPermission.whitelist)" class="flex flex-wrap gap-2">
+            <div
+              v-if="can(PlayersPermission.whitelist) && overview.rcon"
+              class="flex flex-wrap gap-2"
+            >
               <Button
+                v-if="overview.whitelist?.enabled !== true"
                 size="sm"
                 variant="outline"
                 :disabled="busy"
@@ -480,6 +587,7 @@ onUnmounted(() => clearInterval(timer));
                 {{ t('players.whitelist.on') }}
               </Button>
               <Button
+                v-if="overview.whitelist?.enabled !== false"
                 size="sm"
                 variant="outline"
                 :disabled="busy"
@@ -491,7 +599,7 @@ onUnmounted(() => clearInterval(timer));
           </CardContent>
         </Card>
 
-        <Card>
+        <Card v-if="overview.rcon">
           <CardHeader>
             <CardTitle>{{ t('players.bans.title') }}</CardTitle>
           </CardHeader>

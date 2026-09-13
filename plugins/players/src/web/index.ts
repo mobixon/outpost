@@ -14,7 +14,8 @@ export default defineWebPlugin({
       icon: UsersIcon,
       component: () => import('./PlayersTab.vue'),
       permission: PlayersPermission.view,
-      capability: 'commands.send',
+      // With the Files connector alone the tab shows and edits the whitelist.
+      capability: ['commands.send', 'files.read'],
       order: 200,
     },
   ],
