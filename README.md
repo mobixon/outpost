@@ -12,8 +12,9 @@
 </p>
 
 **Outpost** is a lightweight, self-hosted admin panel for **Minecraft: Java Edition**. It connects
-to the server you already run over **RCON** — nothing to install into the game, no migration into a
-hosting panel. Your team gets a web console, player management and scheduled tasks, with roles,
+to the server you already run — over **RCON**, and to its **files** from a mounted folder or over
+**SFTP** — with nothing to install into the game and no migration into a hosting panel. Your team
+gets a web console with the live server log, player management and scheduled tasks, with roles,
 two-factor login and an audit log.
 
 <p align="center">
@@ -22,18 +23,25 @@ two-factor login and an audit log.
 
 ## Why Outpost
 
-- **Made for Minecraft.** A console with command history and completion; players online, history,
-  whitelist, bans, kicks and operators, aware of offline-mode servers; scheduled commands and
-  rotating chat announcements.
-- **Just RCON.** Works with any Java server that has RCON on: vanilla, Fabric, Paper, or
-  `itzg/minecraft-server`. No plugin, mod or agent on the game server.
+- **Made for Minecraft.** A console with command completion and a command history kept in your
+  account; players online, history, whitelist, bans, kicks and operators, aware of offline-mode
+  servers; scheduled commands and rotating chat announcements.
+- **Live log.** The console shows the server log as the server writes it, coloured by level, and
+  picks up where it left off after a lost connection. Viewers never see it, since it holds the
+  chat and the IP addresses of the players.
+- **Connects to what is already there.** RCON drives the console, the players and the scheduler on
+  any Java server with RCON on: vanilla, Fabric, Paper or `itzg/minecraft-server`. The server's
+  files — a folder mounted into Outpost, or SFTP for servers at a game host — add the live log. No
+  plugin, mod or agent on the game server.
 - **Light.** One container of about 110 MB that idles at about 70 MB of RAM. SQLite is built in;
   PostgreSQL is optional.
 - **Set up in minutes.** Create the administrator with a one-time setup token, add the server and
-  press **Test**: Outpost checks the connection, the password and a first command step by step and
-  says what is wrong.
+  press **Test** on each connection: Outpost checks it step by step — the RCON port, password and a
+  first command; the folder or the SFTP login, host key and `server.properties` — and says what is
+  wrong.
 - **Runs next to your server.** Put it into the same Docker network, Compose project or CapRover
-  as the game server. RCON stays on the private network and is never exposed to the internet.
+  as the game server. RCON stays on the private network and is never exposed to the internet;
+  SFTP pins the host key of the server.
 - **Built for a team.** Per-server roles (owner, admin, moderator, viewer), invitation links, 2FA
   required for administrators, GitHub and OpenID Connect login, and an audit log of every action.
 - English and Russian interface.
@@ -79,6 +87,7 @@ services:
       OUTPOST_PUBLIC_URL: http://localhost:3000
     volumes:
       - outpost-data:/data
+      - minecraft-data:/servers/minecraft:ro # the files of the game server, for the live log
 
 volumes:
   minecraft-data:
@@ -87,21 +96,25 @@ volumes:
 
 1. `docker compose up -d`, then read the setup token with `docker compose logs outpost`.
 2. Open <http://localhost:3000>, create the administrator and turn on two-factor authentication.
-3. **Add server** → **Settings** → **Connection**: host `minecraft`, port `25575` and the RCON
-   password → **Test** → **Save**.
+3. **Add server** → **Settings** → **RCON**: host `minecraft`, port `25575` and the RCON password
+   → **Test** → **Save**.
+4. **Settings** → **Files**: folder `minecraft` → **Test** → **Save**. The console now shows the
+   live log.
 
-Already running a server? Add only the `outpost` service to its Docker network. A domain with
-HTTPS, a reverse proxy, CapRover, updates and backups are covered in
+Already running a server? Add only the `outpost` service to its Docker network, and mount its data
+folder below `/servers` for the live log. A server at a game host connects over RCON and SFTP
+instead. A domain with HTTPS, a reverse proxy, CapRover, updates and backups are covered in
 [docs/install.md](docs/install.md).
 
 ## Documentation
 
-- [Installation](docs/install.md) — Compose, reverse proxy, CapRover, updates, backups
+- [Installation](docs/install.md) — Compose, reverse proxy, CapRover, file access, updates, backups
 - [Configuration](docs/configuration.md) — all settings
 - [Authentication](docs/authentication.md) — accounts, 2FA, invitations, GitHub and OIDC login
-- [Servers, roles and modules](docs/servers.md)
-- [Roadmap](docs/PLAN.md#18-roadmap-after-v01) — a full Docker connection with the live log and
-  files, backups, mods from Modrinth, restarts with warnings, statistics and more
+- [Servers, connections, roles and modules](docs/servers.md)
+- [Roadmap](docs/PLAN.md#18-roadmap-after-v01) — more modules on top of the files (offline-mode
+  whitelist, settings editor), backups, mods from Modrinth, restarts with warnings, statistics and
+  more
 
 ## Development
 
