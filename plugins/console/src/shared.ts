@@ -27,6 +27,25 @@ export const chatRequestSchema = z.object({
   message: z.string().trim().min(1).max(256),
 });
 
+/** A command of the user's history on a server. */
+export const historyEntrySchema = z.object({
+  id: z.string(),
+  command: z.string(),
+  /** How often the user ran it. */
+  uses: z.number().int(),
+  usedAt: z.string(),
+});
+export type HistoryEntry = z.infer<typeof historyEntrySchema>;
+
+/** The history, the last used command first. */
+export const historySchema = z.object({
+  commands: z.array(historyEntrySchema),
+});
+
+export const historyRemovedSchema = z.object({
+  removed: z.number().int(),
+});
+
 /**
  * The `tellraw` command that shows a chat message from the panel to all players. The text is
  * JSON-encoded, so nothing in it can change the command.

@@ -97,7 +97,10 @@ environment. Once RCON is connected, **Overview** shows whether the server answe
 command and message is written to the audit log. With the Files connector the Console also shows
 the **live log** of the server, to owners, admins and moderators (`console.read`): viewers do not
 see it, because it contains the chat and the IP addresses of the players. The browser follows it
-over server-sent events and gets the lines it missed when it reconnects.
+over server-sent events and gets the lines it missed when it reconnects. The commands a user runs
+are kept in their **command history** for that server — the last 100, in the database, so it
+follows the user to every browser: the history button lists them (narrowed to what is typed) and
+puts the chosen one into the command line, and the arrow keys go through them.
 
 Limitations of the RCON connection:
 

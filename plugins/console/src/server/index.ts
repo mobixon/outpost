@@ -1,4 +1,5 @@
-import { definePlugin, PLUGIN_API_VERSION, type LogLine } from '@outpost/plugin-api';
+import { definePlugin, HttpError, PLUGIN_API_VERSION, type LogLine } from '@outpost/plugin-api';
+import { z } from 'zod';
 import {
   chatCommand,
   chatRequestSchema,
@@ -6,7 +7,11 @@ import {
   commandResultSchema,
   CONSOLE_PLUGIN_ID,
   ConsolePermission,
+  historyRemovedSchema,
+  historySchema,
 } from '../shared.js';
+import { CommandHistory } from './history.js';
+import { migrations, type ConsoleTables } from './tables.js';
 
 export default definePlugin({
   id: CONSOLE_PLUGIN_ID,
@@ -14,6 +19,7 @@ export default definePlugin({
   apiVersion: PLUGIN_API_VERSION,
   // Chat uses tellraw and replies are rendered with § codes: Minecraft only for now.
   games: ['minecraft-java'],
+  migrations,
   permissions: [
     { key: ConsolePermission.execute, roles: ['owner', 'admin'] },
     { key: ConsolePermission.chat, roles: ['owner', 'admin', 'moderator'] },
@@ -22,6 +28,8 @@ export default definePlugin({
   ],
 
   setup(ctx) {
+    const history = new CommandHistory(ctx.db<ConsoleTables>());
+
     // The live log: the recent lines first, then new ones as the server writes them.
     ctx.http.serverEvents({
       url: '/log',
@@ -59,6 +67,8 @@ export default definePlugin({
           ok = true;
           return { reply };
         } finally {
+          // Also a command that failed can be picked again from the history.
+          await history.record(server.id, user.id, command);
           // Every command is recorded, also the ones that failed.
           await ctx.audit.record({
             action: 'command',
@@ -68,6 +78,35 @@ export default definePlugin({
             details: { command, ok },
           });
         }
+      },
+    });
+
+    // The command history of the signed-in user on this server.
+    ctx.http.serverRoute({
+      method: 'GET',
+      url: '/history',
+      permission: ConsolePermission.execute,
+      schema: { response: historySchema },
+      handler: async ({ server, user }) => ({ commands: await history.list(server.id, user.id) }),
+    });
+
+    ctx.http.serverRoute({
+      method: 'DELETE',
+      url: '/history',
+      permission: ConsolePermission.execute,
+      schema: { response: historyRemovedSchema },
+      handler: async ({ server, user }) => ({ removed: await history.remove(server.id, user.id) }),
+    });
+
+    ctx.http.serverRoute({
+      method: 'DELETE',
+      url: '/history/:id',
+      permission: ConsolePermission.execute,
+      schema: { params: z.object({ id: z.string() }), response: historyRemovedSchema },
+      handler: async ({ server, user, params }) => {
+        const removed = await history.remove(server.id, user.id, params.id);
+        if (removed === 0) throw new HttpError(404, 'not_found', 'No such command in the history');
+        return { removed };
       },
     });
 

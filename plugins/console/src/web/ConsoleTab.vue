@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { SendIcon, TerminalIcon, Trash2Icon } from '@lucide/vue';
+import { HistoryIcon, SendIcon, TerminalIcon, Trash2Icon } from '@lucide/vue';
 import { serverPluginApiPath } from '@outpost/shared';
 import {
   Alert,
@@ -7,20 +7,29 @@ import {
   Button,
   Card,
   CardContent,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
   Field,
   FieldDescription,
   FieldLabel,
   Input,
   Spinner,
 } from '@outpost/ui';
-import { ApiError, apiSend, useServerContext } from '@outpost/web-plugin-api';
+import { ApiError, apiFetch, apiSend, useServerContext } from '@outpost/web-plugin-api';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   CONSOLE_PLUGIN_ID,
   commandResultSchema,
   ConsolePermission,
+  historySchema,
   logLinesSchema,
+  type HistoryEntry,
 } from '../shared.js';
 import { complete } from './commands.js';
 import { parseFormatting } from './formatting.js';
@@ -36,7 +45,8 @@ interface Entry {
 type LiveState = 'connecting' | 'live' | 'reconnecting' | 'closed';
 
 const MAX_ENTRIES = 1000;
-const MAX_HISTORY = 100;
+/** Commands shown in the history menu. */
+const MAX_HISTORY_SHOWN = 50;
 const LEVEL_CLASS: Record<LogLevel, string> = {
   error: 'text-red-300',
   warn: 'text-amber-200',
@@ -61,11 +71,11 @@ const live = computed(
 );
 const liveState = ref<LiveState>('connecting');
 
-// The commands and replies live for the browser tab; the log comes from the server again.
+// The commands and replies live for the browser tab; the log comes from the server again, and
+// the command history is kept in the account of the user.
 const transcriptKey = computed(() => `outpost.console.${server.value.id}`);
-const historyKey = computed(() => `outpost.console.history.${server.value.id}`);
 const entries = ref<Entry[]>(load<Entry[]>(sessionStorage, transcriptKey.value) ?? []);
-const history = ref<string[]>(load<string[]>(localStorage, historyKey.value) ?? []);
+const history = ref<HistoryEntry[]>([]);
 let historyIndex = -1;
 const command = ref('');
 const matches = ref<string[]>([]);
@@ -154,18 +164,53 @@ function follow(): void {
   });
 }
 
+async function loadHistory(): Promise<void> {
+  if (!canExecute.value) return;
+  try {
+    history.value = (await apiFetch(path('/history'), historySchema)).commands;
+  } catch {
+    // Without the history the command line still works.
+  }
+}
+
 onMounted(() => {
   if (live.value) follow();
+  void loadHistory();
 });
 onBeforeUnmount(() => source?.close());
+
+/** The history, narrowed to the commands that contain what is typed. */
+const historyShown = computed(() => {
+  const typed = command.value.trim().toLowerCase();
+  const found =
+    typed === ''
+      ? history.value
+      : history.value.filter((entry) => entry.command.toLowerCase().includes(typed));
+  return found.slice(0, MAX_HISTORY_SHOWN);
+});
+
+const focusCommand = () => document.getElementById('console-command')?.focus();
+
+function pick(entry: HistoryEntry): void {
+  command.value = entry.command;
+  matches.value = [];
+  historyIndex = -1;
+}
+
+async function clearHistory(): Promise<void> {
+  try {
+    await apiSend('DELETE', path('/history'));
+    history.value = [];
+  } catch (err) {
+    await add('error', describeError(err));
+  }
+}
 
 async function run(): Promise<void> {
   const text = command.value.trim();
   if (text === '' || busy.value) return;
   busy.value = true;
   matches.value = [];
-  history.value = [text, ...history.value.filter((entry) => entry !== text)].slice(0, MAX_HISTORY);
-  store(localStorage, historyKey.value, history.value);
   historyIndex = -1;
   command.value = '';
   await add('command', text);
@@ -181,6 +226,7 @@ async function run(): Promise<void> {
     await add('error', describeError(err));
   } finally {
     busy.value = false;
+    void loadHistory();
   }
 }
 
@@ -212,7 +258,7 @@ function onKey(event: KeyboardEvent): void {
       event.key === 'ArrowUp'
         ? Math.min(historyIndex + 1, history.value.length - 1)
         : Math.max(historyIndex - 1, -1);
-    command.value = historyIndex === -1 ? '' : (history.value[historyIndex] ?? '');
+    command.value = historyIndex === -1 ? '' : (history.value[historyIndex]?.command ?? '');
   }
 }
 
@@ -294,6 +340,59 @@ const clear = () => {
             placeholder="list"
             @keydown="onKey"
           />
+          <DropdownMenu @update:open="(open: boolean) => open && loadHistory()">
+            <DropdownMenuTrigger as-child>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                :aria-label="t('console.history')"
+                :title="t('console.history')"
+                data-testid="console-history"
+              >
+                <HistoryIcon />
+              </Button>
+            </DropdownMenuTrigger>
+            <!-- The chosen command goes into the command line, ready to run or to change. -->
+            <DropdownMenuContent
+              align="end"
+              class="max-h-80 w-80 overflow-y-auto"
+              @close-auto-focus="
+                (event: Event) => {
+                  event.preventDefault();
+                  focusCommand();
+                }
+              "
+            >
+              <DropdownMenuLabel>{{ t('console.history') }}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <p v-if="history.length === 0" class="text-muted-foreground px-2 py-1.5 text-sm">
+                {{ t('console.historyEmpty') }}
+              </p>
+              <p
+                v-else-if="historyShown.length === 0"
+                class="text-muted-foreground px-2 py-1.5 text-sm"
+              >
+                {{ t('console.historyNoMatch') }}
+              </p>
+              <DropdownMenuItem
+                v-for="entry in historyShown"
+                :key="entry.id"
+                class="font-mono"
+                @select="pick(entry)"
+              >
+                <span class="truncate">{{ entry.command }}</span>
+                <DropdownMenuShortcut v-if="entry.uses > 1">×{{ entry.uses }}</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <template v-if="history.length > 0">
+                <DropdownMenuSeparator />
+                <DropdownMenuItem class="text-destructive" @select="clearHistory">
+                  <Trash2Icon />
+                  {{ t('console.historyClear') }}
+                </DropdownMenuItem>
+              </template>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button type="submit" :disabled="busy || command.trim() === ''">
             <Spinner v-if="busy" />
             {{ t('console.run') }}
