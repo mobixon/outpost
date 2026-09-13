@@ -41,6 +41,24 @@ by its service name. Do not publish the RCON port: RCON is not encrypted.
 
 All settings are listed in [configuration](configuration.md).
 
+## File access
+
+Modules read and write the files of a game server through the **Files** connector. Mount the data
+folder of each game server into Outpost below `/servers` (`OUTPOST_FILES_ROOT`):
+
+```yaml
+services:
+  outpost:
+    volumes:
+      - outpost-data:/data
+      - minecraft-data:/servers/survival # the data volume of the game server
+```
+
+Then choose the folder `survival` under **Settings → Files** of the server. Outpost runs as UID
+1000, like `itzg/minecraft-server`; for writing with another game image, run Outpost as the user
+that owns the files (`user: '1001'`). If modules should only read, mount the folder read-only
+(`:ro`) and leave writing off.
+
 ## Behind a reverse proxy
 
 - `OUTPOST_PUBLIC_URL` is the exact address people open. Requests from other origins are rejected,
@@ -60,6 +78,10 @@ All settings are listed in [configuration](configuration.md).
 4. **Deployment** → deploy via image name: `ghcr.io/mobixon/outpost:<version>`.
 5. Connect game servers by their service name: host `srv-captain--<app>`, port `25575`. CapRover
    apps share one overlay network, so RCON needs no public port.
+6. For file access, add a persistent directory to the Outpost app with the **host path** of the
+   game server's data (for example `/captain/data/<app>`) and the path in the app
+   `/servers/<app>`, then choose the folder `<app>` under **Settings → Files**. A game server with a
+   named volume keeps its data in `/var/lib/docker/volumes/captain--<volume>/_data` on the host.
 
 ## First run
 

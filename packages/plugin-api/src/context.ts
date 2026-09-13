@@ -1,6 +1,7 @@
 import type { PluginInfo } from '@outpost/shared';
 import type { Kysely } from 'kysely';
 import type { EventBus } from './events.js';
+import type { FileEntry, FileStat } from './files.js';
 import type { HttpRegistry } from './http.js';
 import type { ServerInfo } from './servers.js';
 
@@ -53,6 +54,21 @@ export interface PluginContext {
      * and 502 when the server cannot be reached.
      */
     send(serverId: string, command: string): Promise<string>;
+  };
+  /**
+   * The files of a game server through its Files connector. Paths are relative to the server's
+   * folder and use `/`, e.g. `server.properties` or `world/stats`; they cannot leave the folder.
+   * Needs the capability `files.read` (`files.write` for `write`), otherwise throws an HttpError
+   * 409; also 404 for a missing file and 413 for a file over 32 MiB.
+   */
+  readonly files: {
+    read(serverId: string, path: string): Promise<Uint8Array>;
+    /** Replaces the file atomically or creates it; its directory must exist. */
+    write(serverId: string, path: string, data: Uint8Array | string): Promise<void>;
+    /** null when nothing exists at the path. */
+    stat(serverId: string, path: string): Promise<FileStat | null>;
+    /** The entries of a directory, sorted by name; `''` is the server's folder. */
+    list(serverId: string, path: string): Promise<FileEntry[]>;
   };
   readonly permissions: {
     /** Whether the user has the permission on the server; superadmins have all. */

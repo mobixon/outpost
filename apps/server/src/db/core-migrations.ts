@@ -206,4 +206,10 @@ export const coreMigrations: readonly Migration[] = [
       await db.schema.alterTable('users').addColumn('theme', 'text').execute();
     },
   },
+  {
+    name: '0007_server_files',
+    async up(db, { types }) {
+      await db.schema.alterTable('servers').addColumn('files', types.json).execute();
+    },
+  },
 ];

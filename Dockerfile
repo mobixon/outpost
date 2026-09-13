@@ -25,7 +25,8 @@ WORKDIR /app
 COPY --from=build /out/ /app/
 COPY --from=build /repo/apps/web/dist/ /app/public/
 # UID 1000 (the image's "node" user) matches the default owner of itzg/minecraft-server files.
-RUN mkdir /data && chown node:node /data
+# /servers is the default OUTPOST_FILES_ROOT: folders of game servers are mounted below it.
+RUN mkdir /data /servers && chown node:node /data /servers
 USER node
 VOLUME ["/data"]
 EXPOSE 3000

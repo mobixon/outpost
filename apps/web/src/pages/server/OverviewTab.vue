@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { CircleCheckIcon, CircleXIcon, PlugZapIcon, RefreshCwIcon } from '@lucide/vue';
-import { API_PREFIX, serverStatusSchema, type ServerStatus } from '@outpost/shared';
+import { API_PREFIX, Capability, serverStatusSchema, type ServerStatus } from '@outpost/shared';
 import {
   Alert,
   AlertDescription,
@@ -13,7 +13,7 @@ import {
   Spinner,
 } from '@outpost/ui';
 import { apiFetch, useServerContext } from '@outpost/web-plugin-api';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { RouterLink } from 'vue-router';
 import { useShell } from '../../shell.js';
@@ -24,9 +24,11 @@ const { server } = useServerContext();
 const isSuperadmin = shell.session?.user?.isSuperadmin === true;
 const status = ref<ServerStatus | null>(null);
 const loading = ref(false);
+// Whether the server answers and who is online is asked over RCON.
+const canAsk = computed(() => server.value.capabilities.includes(Capability.commandsSend));
 
 async function loadStatus(): Promise<void> {
-  if (!server.value.connected || loading.value) return;
+  if (!canAsk.value || loading.value) return;
   loading.value = true;
   try {
     status.value = await apiFetch(
@@ -55,7 +57,7 @@ onMounted(loadStatus);
       <CardHeader class="flex flex-row items-center justify-between gap-2">
         <CardTitle>{{ t('servers.overview.connection') }}</CardTitle>
         <Button
-          v-if="server.connected"
+          v-if="canAsk"
           variant="ghost"
           size="icon"
           :disabled="loading"
@@ -67,7 +69,7 @@ onMounted(loadStatus);
         </Button>
       </CardHeader>
       <CardContent class="flex flex-col gap-4 text-sm">
-        <Alert v-if="!server.connected">
+        <Alert v-if="server.connectors.length === 0">
           <PlugZapIcon />
           <AlertDescription class="flex flex-col items-start gap-2">
             <span>{{
@@ -82,6 +84,10 @@ onMounted(loadStatus);
             </Button>
           </AlertDescription>
         </Alert>
+
+        <p v-else-if="!canAsk" class="text-muted-foreground">
+          {{ t('servers.overview.noRcon') }}
+        </p>
 
         <template v-else>
           <div v-if="status === null" class="flex justify-center py-2"><Spinner /></div>

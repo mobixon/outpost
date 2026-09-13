@@ -143,12 +143,11 @@ test('add a server and invite a moderator to it', async ({ page, browser }) => {
   await expect(page.getByTestId('member-survival-mod')).toContainText('Moderator');
 });
 
-test('connect the server over RCON and see why it does not answer', async ({ page }) => {
+test('connect the server and see why RCON and the files do not answer', async ({ page }) => {
   await signInWithBackupCode(page, backupCodes[2] ?? '');
   await page.goto('/servers/survival/settings');
 
   const card = page.getByTestId('connection-card');
-  await expect(card.getByText('Coming later')).toBeVisible();
   await card.getByLabel('Host').fill('no-such-host.invalid');
   await card.getByLabel('RCON password').fill('a password');
   await card.getByRole('button', { name: 'Test' }).click();
@@ -167,4 +166,11 @@ test('connect the server over RCON and see why it does not answer', async ({ pag
   await expect(page.getByTestId('console-output')).toContainText(
     'The host name cannot be resolved.',
   );
+
+  // Nothing is mounted below /servers in the test container.
+  await page.goto('/servers/survival/settings');
+  const files = page.getByTestId('files-card');
+  await files.getByLabel('Folder', { exact: true }).fill('survival');
+  await files.getByRole('button', { name: 'Test' }).click();
+  await expect(files.getByTestId('files-test')).toContainText('The folder does not exist');
 });

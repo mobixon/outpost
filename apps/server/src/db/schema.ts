@@ -127,6 +127,8 @@ export interface ServersTable {
   game: string | null;
   /** JSON: how Outpost reaches the server, with the RCON password sealed. */
   connection: string | null;
+  /** JSON: the Files connector, a folder below OUTPOST_FILES_ROOT. */
+  files: string | null;
   created_at: number;
   updated_at: number;
 }
