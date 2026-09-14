@@ -14,6 +14,7 @@ const filesProbe = definePlugin({
   id: 'test.files-probe',
   version: '1.0.0',
   apiVersion: PLUGIN_API_VERSION,
+  files: { read: ['server.properties'], write: ['hello.txt'] },
   permissions: [{ key: 'files-probe.use', roles: ['owner'] }],
   setup(ctx) {
     ctx.http.serverRoute({
