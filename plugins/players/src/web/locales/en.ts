@@ -111,6 +111,7 @@ export default {
       joined: 'Joined',
       left: 'Left',
       stillOnline: 'online now',
+      details: 'Inventory and statistics',
       note: 'Times are exact to about 15 seconds: Outpost asks the server who is online.',
     },
   },

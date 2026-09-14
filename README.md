@@ -25,7 +25,8 @@ two-factor login and an audit log.
 
 - **Made for Minecraft.** A console with command completion and a command history kept in your
   account; players online, history, bans, kicks and operators, aware of offline-mode servers; a
-  whitelist that gets the UUIDs right, with a doctor for broken entries; scheduled commands and
+  whitelist that gets the UUIDs right, with a doctor for broken entries; the inventories, ender
+  chests, statistics and advancements of players, read from the world; scheduled commands and
   rotating chat announcements.
 - **Live log.** The console shows the server log as the server writes it, coloured by level, and
   picks up where it left off after a lost connection. Viewers never see it, since it holds the

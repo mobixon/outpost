@@ -47,6 +47,7 @@ import {
 import { ApiError, apiFetch, apiSend, useServerContext } from '@outpost/web-plugin-api';
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { RouterLink, useRouter } from 'vue-router';
 import {
   actionResultSchema,
   overviewSchema,
@@ -66,6 +67,22 @@ const { t, te, locale } = useI18n();
 const { server } = useServerContext();
 const can = (permission: string) => server.value.permissions.includes(permission);
 const url = (path: string) => serverPluginApiPath(server.value.id, PLAYERS_PLUGIN_ID, path);
+const router = useRouter();
+
+// The tab of the Player details module, when it is enabled and the user may see it.
+const DETAILS_ROUTE = 'server-outpost.player-details-player-details';
+const detailsLink = computed(() => {
+  const uuid = detail.value?.player.uuid;
+  if (
+    uuid === undefined ||
+    !router.hasRoute(DETAILS_ROUTE) ||
+    !can('player-details.view') ||
+    !server.value.capabilities.includes('files.read')
+  ) {
+    return null;
+  }
+  return { name: DETAILS_ROUTE, params: { slug: server.value.slug }, query: { player: uuid } };
+});
 
 const overview = ref<Overview | null>(null);
 const players = ref<Player[]>([]);
@@ -780,6 +797,9 @@ onUnmounted(() => clearInterval(timer));
           <dt class="text-muted-foreground">{{ t('players.history.playtime') }}</dt>
           <dd>{{ formatDuration(detail.player.playtimeMs) }}</dd>
         </dl>
+        <Button v-if="detailsLink" as-child variant="outline" size="sm" class="justify-self-start">
+          <RouterLink :to="detailsLink">{{ t('players.history.details') }}</RouterLink>
+        </Button>
         <h3 class="mt-2 font-medium">{{ t('players.history.sessions') }}</h3>
         <div class="max-h-64 overflow-auto">
           <Table>

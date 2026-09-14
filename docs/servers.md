@@ -164,6 +164,38 @@ Where the whitelist comes from and how it is changed depends on the connectors o
   server rewrites the file when the whitelist is changed in the game, so a change made there at the
   same moment can undo one made in Outpost.
 
+## Player details
+
+The **Player details** tab shows what the world files tell about every player who has joined:
+
+- the inventory with the hotbar, armor and off hand, and the **ender chest**, with the
+  enchantments and durability of every item and what shulker boxes and bundles hold;
+- health, food, level and game mode;
+- the **statistics**: play time, deaths, kills, distances, and the blocks mined, items used and
+  crafted and mobs killed most;
+- the **advancements** made, the last one first;
+- where the player is, their respawn point and where they last died.
+
+It needs the Files connector (reading is enough) and no RCON. The server writes the file of a
+player when they leave and at every autosave (every 5 minutes by default), so for players online
+the tab can be a few minutes behind; it shows when the file was saved. The **Players** tab links
+the card of a player to their details.
+
+Owners, admins and moderators see the tab (`player-details.view`). Where players are and died is
+shown only to owners and admins (`player-details.location`), because it leads to their bases.
+
+**Item icons.** Outpost ships no files of the game. An owner can let Outpost download the official
+Minecraft client of the version of the world from Mojang: about 40 MB, once per version, after
+accepting the [Minecraft EULA](https://www.minecraft.net/eula). Outpost keeps only the item icons
+and the English and Russian names (about 1 MB in its database) and serves them itself, so the
+browsers of viewers load nothing from other sites. Until then items are shown by name, with a
+letter. The download needs Outpost to reach `piston-meta.mojang.com`, `piston-data.mojang.com`
+and `resources.download.minecraft.net`. Items of mods have no icons and names made from their ids.
+
+The module reads only `server.properties` (for `level-name`), `usercache.json` (for the names),
+`level.dat` (for the version) and the player files: `<world>/players/data`, `stats` and
+`advancements` in recent versions (26.x), `<world>/playerdata`, `stats` and `advancements` before.
+
 ## Scheduler
 
 The **Scheduler** tab runs tasks on a schedule. It needs a connection.
@@ -187,21 +219,23 @@ The **Scheduler** tab runs tasks on a schedule. It needs a connection.
 
 ## Roles
 
-| Permission                                                | Owner | Admin | Moderator | Viewer |
-| --------------------------------------------------------- | :---: | :---: | :-------: | :----: |
-| See the server (`server.view`)                            |   ✓   |   ✓   |     ✓     |   ✓    |
-| Rename and delete the server (`server.manage`)            |   ✓   |       |           |        |
-| Manage members and invite people (`members.manage`)       |   ✓   |  ✓¹   |           |        |
-| Read the server's audit log (`audit.view`)                |   ✓   |   ✓   |           |        |
-| Run any console command (`console.execute`)               |   ✓   |   ✓   |           |        |
-| Send chat messages (`chat.send`)                          |   ✓   |   ✓   |     ✓     |        |
-| See the players, whitelist and bans (`players.view`)      |   ✓   |   ✓   |     ✓     |   ✓    |
-| Kick players (`players.kick`)                             |   ✓   |   ✓   |     ✓     |        |
-| Ban and unban players and IP addresses (`players.ban`)    |   ✓   |   ✓   |     ✓     |        |
-| Manage the whitelist (`players.whitelist`)                |   ✓   |   ✓   |     ✓     |        |
-| Give and take operator rights (`players.op`)              |   ✓   |   ✓   |           |        |
-| See the scheduled tasks and their runs (`scheduler.view`) |   ✓   |   ✓   |     ✓     |   ✓    |
-| Create, change, run and delete tasks (`scheduler.manage`) |   ✓   |   ✓   |           |        |
+| Permission                                                           | Owner | Admin | Moderator | Viewer |
+| -------------------------------------------------------------------- | :---: | :---: | :-------: | :----: |
+| See the server (`server.view`)                                       |   ✓   |   ✓   |     ✓     |   ✓    |
+| Rename and delete the server (`server.manage`)                       |   ✓   |       |           |        |
+| Manage members and invite people (`members.manage`)                  |   ✓   |  ✓¹   |           |        |
+| Read the server's audit log (`audit.view`)                           |   ✓   |   ✓   |           |        |
+| Run any console command (`console.execute`)                          |   ✓   |   ✓   |           |        |
+| Send chat messages (`chat.send`)                                     |   ✓   |   ✓   |     ✓     |        |
+| See the players, whitelist and bans (`players.view`)                 |   ✓   |   ✓   |     ✓     |   ✓    |
+| Kick players (`players.kick`)                                        |   ✓   |   ✓   |     ✓     |        |
+| Ban and unban players and IP addresses (`players.ban`)               |   ✓   |   ✓   |     ✓     |        |
+| Manage the whitelist (`players.whitelist`)                           |   ✓   |   ✓   |     ✓     |        |
+| Give and take operator rights (`players.op`)                         |   ✓   |   ✓   |           |        |
+| See inventories, statistics and advancements (`player-details.view`) |   ✓   |   ✓   |     ✓     |        |
+| See where players are and died (`player-details.location`)           |   ✓   |   ✓   |           |        |
+| See the scheduled tasks and their runs (`scheduler.view`)            |   ✓   |   ✓   |     ✓     |   ✓    |
+| Create, change, run and delete tasks (`scheduler.manage`)            |   ✓   |   ✓   |           |        |
 
 ¹ Admins manage only moderators and viewers: they can add, change, remove and invite people with
 these roles, but cannot touch owners and other admins. Owners manage every role, including other

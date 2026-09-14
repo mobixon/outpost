@@ -1,5 +1,6 @@
 import about from '@outpost/plugin-about/web';
 import consolePlugin from '@outpost/plugin-console/web';
+import playerDetailsPlugin from '@outpost/plugin-player-details/web';
 import playersPlugin from '@outpost/plugin-players/web';
 import schedulerPlugin from '@outpost/plugin-scheduler/web';
 import { API_PREFIX, pluginListSchema } from '@outpost/shared';
@@ -10,6 +11,7 @@ export const builtInWebPlugins: readonly WebPluginDefinition[] = [
   about,
   consolePlugin,
   playersPlugin,
+  playerDetailsPlugin,
   schedulerPlugin,
 ];
 
