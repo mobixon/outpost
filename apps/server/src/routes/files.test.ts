@@ -11,6 +11,7 @@ const filesProbe = definePlugin({
   id: 'test.files-probe',
   version: '1.0.0',
   apiVersion: PLUGIN_API_VERSION,
+  files: { read: ['server.properties'], write: ['hello.txt'] },
   permissions: [{ key: 'files-probe.use', roles: ['owner'] }],
   setup(ctx) {
     ctx.http.serverRoute({
@@ -20,6 +21,14 @@ const filesProbe = definePlugin({
       capability: 'files.read',
       handler: async ({ server }) => ({
         text: new TextDecoder().decode(await ctx.files.read(server.id, 'server.properties')),
+      }),
+    });
+    ctx.http.serverRoute({
+      method: 'GET',
+      url: '/ops',
+      permission: 'files-probe.use',
+      handler: async ({ server }) => ({
+        text: new TextDecoder().decode(await ctx.files.read(server.id, 'ops.json')),
       }),
     });
     ctx.http.serverRoute({
@@ -138,6 +147,10 @@ describe('the Files connector', () => {
       files: { source: 'folder', path: 'survival', writable: false },
     });
     expect((await probe('GET', '/properties')).json()).toEqual({ text: 'level-name=world\n' });
+    // Modules use only the files they declare.
+    expect((await probe('GET', '/ops')).json()).toMatchObject({
+      error: { code: 'file_out_of_scope' },
+    });
     // Writing needs files.write even where a route does not declare the capability.
     expect((await probe('POST', '/write')).json()).toMatchObject({
       error: { code: 'capability_missing' },

@@ -27,10 +27,37 @@ export const actionResultSchema = z.object({
   reply: z.string(),
   /** The action waits until the player is seen online (never-seen players on offline servers). */
   pending: z.boolean(),
-  /** `offline_unknown_player`: whitelisted, but may get the wrong UUID (offline mode). */
-  warning: z.enum(['offline_unknown_player']).nullable(),
+  /**
+   * `offline_unknown_player`: whitelisted over RCON, but may get the wrong UUID (offline mode);
+   * `applies_on_restart`: whitelist.json has changed, but the server loads it only when it starts
+   * (no RCON to reload it, or the server is down).
+   */
+  warning: z.enum(['offline_unknown_player', 'applies_on_restart']).nullable(),
 });
 export type ActionResult = z.infer<typeof actionResultSchema>;
+
+export const whitelistEntrySchema = z.object({
+  name: z.string(),
+  /** From whitelist.json; null when the list came over RCON. */
+  uuid: z.string().nullable(),
+  /** The UUID does not fit the mode of the server, so the player cannot join (UUID doctor). */
+  wrongUuid: z.boolean(),
+});
+
+export const whitelistSchema = z.object({
+  /** Where the list comes from: whitelist.json (Files connector) or `whitelist list` over RCON. */
+  source: z.enum(['file', 'rcon']),
+  /** How it is changed: in whitelist.json, over RCON, or not at all (read-only files, no RCON). */
+  change: z.enum(['file', 'rcon']).nullable(),
+  /** Whether the whitelist is on (`white-list` of server.properties); null when unknown. */
+  enabled: z.boolean().nullable(),
+  /** Changes of whitelist.json apply at once (RCON `whitelist reload`), not at the next start. */
+  reloads: z.boolean(),
+  /** Entries with a wrong UUID can be fixed: writable files of an offline-mode server. */
+  fixable: z.boolean(),
+  entries: z.array(whitelistEntrySchema),
+});
+export type Whitelist = z.infer<typeof whitelistSchema>;
 
 export const pendingActionSchema = z.object({
   id: z.string(),
@@ -54,14 +81,20 @@ export const overviewSchema = z.object({
   reachable: z.boolean(),
   error: z.string().nullable(),
   mode: z.object({
-    /** The override if set, else what the UUIDs of players online showed. */
+    /** The override if set, else what the UUIDs of players online showed, else server.properties. */
     effective: serverModeSchema.nullable(),
     detected: serverModeSchema.nullable(),
+    /** `online-mode` of server.properties; null without the Files connector. */
+    configured: serverModeSchema.nullable(),
     override: serverModeSchema.nullable(),
   }),
+  /** The server has RCON, which who is online, bans, kicks and operators need. */
+  rcon: z.boolean(),
   max: z.number().int().nullable(),
   online: z.array(z.object({ uuid: z.string(), name: z.string(), since: z.string().nullable() })),
-  whitelist: z.array(z.string()).nullable(),
+  whitelist: whitelistSchema.nullable(),
+  /** Why whitelist.json could not be read, e.g. `whitelist_invalid`. */
+  whitelistError: z.string().nullable(),
   bans: z.array(banEntrySchema).nullable(),
   ipBans: z.array(banEntrySchema).nullable(),
   pending: z.array(pendingActionSchema),

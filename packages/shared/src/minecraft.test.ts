@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   normalizeReason,
+  offlineUuid,
   parseBanList,
   parsePlayerList,
+  parseProperties,
   parseWhitelist,
   stripFormatting,
   uuidMode,
@@ -114,5 +116,41 @@ describe('uuidMode', () => {
     expect(uuidMode(STEVE)).toBe('online');
     expect(uuidMode(OFFLINE)).toBe('offline');
     expect(uuidMode('00000000-0000-0000-0000-000000000000')).toBeNull();
+  });
+});
+
+describe('offlineUuid', () => {
+  it('is the name-based UUID Minecraft gives offline players, by the exact name', () => {
+    expect(offlineUuid('Notch')).toBe(OFFLINE);
+    expect(offlineUuid('Steve')).toBe('5627dd98-e6be-3c21-b8a8-e92344183641');
+    expect(offlineUuid('steve')).toBe('53909932-f794-33c0-9329-948045a4c1ce');
+    expect(uuidMode(offlineUuid('Alex'))).toBe('offline');
+  });
+});
+
+describe('parseProperties', () => {
+  it('reads server.properties as Java writes it', () => {
+    const properties = parseProperties(
+      [
+        '#Minecraft server properties',
+        '#Sun Sep 14 12:00:00 UTC 2026',
+        'online-mode=false',
+        'motd=A Minecraft Server\\: \\u00A7aHi',
+        'white-list = true\r',
+        'level-seed=',
+        'long=one \\',
+        '    two',
+        '! a comment',
+        'key:value',
+      ].join('\n'),
+    );
+    expect(Object.fromEntries(properties)).toEqual({
+      'online-mode': 'false',
+      motd: 'A Minecraft Server: §aHi',
+      'white-list': 'true',
+      'level-seed': '',
+      long: 'one two',
+      key: 'value',
+    });
   });
 });

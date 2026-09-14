@@ -118,6 +118,34 @@ describe('definePlugin permissions', () => {
   });
 });
 
+describe('definePlugin files', () => {
+  const valid = { id: 'outpost.players', version: '0.1.0', apiVersion: PLUGIN_API_VERSION };
+
+  it('accepts relative paths with wildcards', () => {
+    expect(() =>
+      definePlugin({
+        ...valid,
+        files: {
+          read: ['server.properties', 'world/stats/*.json', 'logs/**'],
+          write: ['whitelist.json'],
+        },
+      }),
+    ).not.toThrow();
+  });
+
+  it.each(['', '/etc/passwd', '../secret', 'world/../x', './x', 'a//b', 'a**', 'a\\b', 'a b'])(
+    'rejects scope %j',
+    (scope) => {
+      expect(() => definePlugin({ ...valid, files: { read: [scope] } })).toThrow(
+        /invalid file scope/,
+      );
+      expect(() => definePlugin({ ...valid, files: { write: [scope] } })).toThrow(
+        /invalid file scope/,
+      );
+    },
+  );
+});
+
 describe('parseDependency', () => {
   it('detects optional dependencies', () => {
     expect(parseDependency('outpost.console')).toEqual({ id: 'outpost.console', optional: false });

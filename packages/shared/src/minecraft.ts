@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { md5, utf8 } from './md5.js';
 
 // Replies of Minecraft Java to RCON commands, as of version 26.x (older formats where known).
 // Over RCON Minecraft joins the lines of a reply without line breaks.
@@ -138,4 +139,47 @@ export function normalizeReason(reason: string | undefined): string {
 export function uuidMode(uuid: string): 'online' | 'offline' | null {
   const version = uuid.replace(/-/g, '').charAt(12);
   return version === '3' ? 'offline' : version === '4' ? 'online' : null;
+}
+
+/**
+ * The UUID of a player on an offline-mode server: name-based (version 3) from
+ * `OfflinePlayer:<name>`, as Java's `UUID.nameUUIDFromBytes`. The case of the name counts.
+ */
+export function offlineUuid(name: string): string {
+  const hash = md5(utf8(`OfflinePlayer:${name}`));
+  hash[6] = ((hash[6] ?? 0) & 0x0f) | 0x30;
+  hash[8] = ((hash[8] ?? 0) & 0x3f) | 0x80;
+  const hex = Array.from(hash, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return [8, 12, 16, 20, 32]
+    .map((end, index, ends) => hex.slice(ends[index - 1] ?? 0, end))
+    .join('-');
+}
+
+const PROPERTY_ESCAPES: Record<string, string> = { t: '\t', n: '\n', r: '\r', f: '\f' };
+
+const unescapeProperty = (text: string) =>
+  text.replace(/\\(u[0-9a-fA-F]{4}|.)/gs, (_, escape: string) =>
+    escape.length === 5
+      ? String.fromCharCode(parseInt(escape.slice(1), 16))
+      : (PROPERTY_ESCAPES[escape] ?? escape),
+  );
+
+/** Parses a Java properties file such as `server.properties`. */
+export function parseProperties(text: string): Map<string, string> {
+  const properties = new Map<string, string>();
+  const lines = text.split(/\r\n|\r|\n/);
+  for (let index = 0; index < lines.length; index++) {
+    let line = (lines[index] ?? '').trimStart();
+    if (line === '' || line.startsWith('#') || line.startsWith('!')) continue;
+    // A line that ends with an odd number of backslashes goes on in the next one.
+    while (/(?<!\\)(?:\\\\)*\\$/.test(line) && index + 1 < lines.length) {
+      index += 1;
+      line = line.slice(0, -1) + (lines[index] ?? '').trimStart();
+    }
+    const match = /^((?:\\.|[^\\=:\s])*)\s*(?:[=:]\s*)?(.*)$/s.exec(line);
+    if (match !== null) {
+      properties.set(unescapeProperty(match[1] ?? ''), unescapeProperty(match[2] ?? ''));
+    }
+  }
+  return properties;
 }

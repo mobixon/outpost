@@ -5,11 +5,14 @@ import {
   sql,
   type PluginContext,
   type PluginDefinition,
+  type ServerInfo,
 } from '@outpost/plugin-api';
 import {
   CorePermission,
   normalizeReason,
+  offlineUuid,
   parseBanList,
+  parseProperties,
   parseWhitelist,
   stripFormatting,
 } from '@outpost/shared';
@@ -29,18 +32,31 @@ import {
   whitelistStateRequestSchema,
   type ActionResult,
   type Overview,
+  type ServerMode,
+  type Whitelist,
 } from '../shared.js';
 import { migrations, type PlayersTables } from './tables.js';
 import { PlayerTracker } from './tracker.js';
+import {
+  hasWrongUuid,
+  PerServerQueue,
+  properName,
+  readWhitelist,
+  WHITELIST_FILE,
+  writeWhitelist,
+  type WhitelistFileEntry,
+} from './whitelist.js';
 
 export interface PlayersPluginOptions {
   /** How often every connected server is asked who is online; 0 turns polling off (tests). */
   pollIntervalMs?: number;
 }
 
+const PROPERTIES_FILE = 'server.properties';
 const PRUNE_INTERVAL_MS = 6 * 60 * 60_000;
 const iso = (time: number | null | undefined) =>
   time === null || time === undefined ? null : new Date(Number(time)).toISOString();
+const decoder = new TextDecoder();
 
 export function createPlayersPlugin(options: PlayersPluginOptions = {}): PluginDefinition {
   const pollIntervalMs = options.pollIntervalMs ?? 15_000;
@@ -49,6 +65,7 @@ export function createPlayersPlugin(options: PlayersPluginOptions = {}): PluginD
     version: '0.1.0',
     apiVersion: PLUGIN_API_VERSION,
     games: ['minecraft-java'],
+    files: { read: [PROPERTIES_FILE], write: [WHITELIST_FILE] },
     migrations,
     permissions: [
       { key: PlayersPermission.view, roles: ['owner', 'admin', 'moderator', 'viewer'] },
@@ -63,9 +80,20 @@ export function createPlayersPlugin(options: PlayersPluginOptions = {}): PluginD
 
 export default createPlayersPlugin();
 
+/** What the connectors of a server allow: commands over RCON, reading or writing its files. */
+function accessOf(server: ServerInfo) {
+  return {
+    rcon: server.capabilities.includes('commands.send'),
+    read: server.capabilities.includes('files.read'),
+    write: server.capabilities.includes('files.write'),
+  };
+}
+type Access = ReturnType<typeof accessOf>;
+
 function setup(ctx: PluginContext, pollIntervalMs: number): void {
   const db = ctx.db<PlayersTables>();
   const tracker = new PlayerTracker(ctx, db);
+  const whitelistEdits = new PerServerQueue();
   const capability = 'commands.send';
   const send = (serverId: string, command: string) => ctx.commands.send(serverId, command);
   const result = (reply: string, extra: Partial<ActionResult> = {}): ActionResult => ({
@@ -98,6 +126,34 @@ function setup(ctx: PluginContext, pollIntervalMs: number): void {
     });
   }
 
+  /** server.properties, or null without the Files connector or when it cannot be read. */
+  async function propertiesOf(server: ServerInfo): Promise<Map<string, string> | null> {
+    if (!accessOf(server).read) return null;
+    try {
+      return parseProperties(decoder.decode(await ctx.files.read(server.id, PROPERTIES_FILE)));
+    } catch (err) {
+      if (err instanceof HttpError) return null;
+      throw err;
+    }
+  }
+
+  /**
+   * The mode of the server: set by hand, else shown by the UUIDs of the players online (right also
+   * behind proxies such as Velocity), else `online-mode` of server.properties.
+   */
+  async function modeOf(
+    server: ServerInfo,
+    properties?: Map<string, string> | null,
+  ): Promise<Overview['mode']> {
+    const { detected, override } = await tracker.mode(server.id);
+    const settings = properties === undefined ? await propertiesOf(server) : properties;
+    let configured: ServerMode | null = null;
+    if (settings !== null) {
+      configured = settings.get('online-mode')?.trim() === 'false' ? 'offline' : 'online';
+    }
+    return { effective: override ?? detected ?? configured, detected, configured, override };
+  }
+
   async function pendingOf(serverId: string) {
     const rows = await db
       .selectFrom('mc_pending_actions')
@@ -126,11 +182,8 @@ function setup(ctx: PluginContext, pollIntervalMs: number): void {
   }
 
   /** On offline servers, bans and operator rights for unseen players wait for them (see §6.3). */
-  async function waitsForPlayer(serverId: string, name: string): Promise<boolean> {
-    return (
-      (await tracker.mode(serverId)).effective === 'offline' &&
-      !(await tracker.seen(serverId, name))
-    );
+  async function waitsForPlayer(server: ServerInfo, name: string): Promise<boolean> {
+    return (await modeOf(server)).effective === 'offline' && !(await tracker.seen(server.id, name));
   }
 
   async function addPending(
@@ -156,48 +209,123 @@ function setup(ctx: PluginContext, pollIntervalMs: number): void {
     return id;
   }
 
+  /** Changes whitelist.json, one change per server at a time; `change` returns null for none. */
+  function editWhitelist(
+    server: ServerInfo,
+    change: (entries: WhitelistFileEntry[]) => WhitelistFileEntry[] | null,
+  ): Promise<void> {
+    return whitelistEdits.run(server.id, async () => {
+      const next = change(await readWhitelist(ctx.files, server.id));
+      if (next !== null) await writeWhitelist(ctx.files, server.id, next);
+    });
+  }
+
+  /** Makes the server load whitelist.json again; without RCON it does when it starts. */
+  async function reloadWhitelist(server: ServerInfo): Promise<ActionResult> {
+    const later = result('', { warning: 'applies_on_restart' });
+    if (!accessOf(server).rcon) return later;
+    try {
+      return result(await send(server.id, 'whitelist reload'));
+    } catch (err) {
+      if (err instanceof HttpError) return later;
+      throw err;
+    }
+  }
+
+  const cannotChangeWhitelist = () =>
+    new HttpError(
+      409,
+      'capability_missing',
+      'Changing the whitelist needs RCON or the Files connector with writing on',
+    );
+
+  function whitelistView(
+    access: Access,
+    properties: Map<string, string> | null,
+    mode: ServerMode | null,
+    known: readonly string[],
+    fileEntries: readonly WhitelistFileEntry[] | null,
+    rconNames: readonly string[] | null,
+  ): Whitelist | null {
+    const base = {
+      change: access.write ? 'file' : access.rcon ? 'rcon' : null,
+      enabled: properties === null ? null : properties.get('white-list')?.trim() === 'true',
+      reloads: access.rcon,
+    } satisfies Partial<Whitelist>;
+    if (fileEntries !== null) {
+      const entries = fileEntries.map((entry) => ({
+        name: entry.name,
+        uuid: entry.uuid,
+        wrongUuid: hasWrongUuid(entry, mode, known),
+      }));
+      const fixable = access.write && mode === 'offline' && entries.some((e) => e.wrongUuid);
+      return { ...base, source: 'file', fixable, entries };
+    }
+    if (rconNames === null) return null;
+    const entries = rconNames.map((name) => ({ name, uuid: null, wrongUuid: false }));
+    return { ...base, source: 'rcon', fixable: false, entries };
+  }
+
   ctx.http.serverRoute({
     method: 'GET',
     url: '/overview',
     permission: PlayersPermission.view,
-    capability,
     schema: { response: overviewSchema },
     handler: async ({ server }): Promise<Overview> => {
+      const access = accessOf(server);
+      let fileEntries: WhitelistFileEntry[] | null = null;
+      let whitelistError: string | null = null;
+      if (access.read) {
+        try {
+          fileEntries = await readWhitelist(ctx.files, server.id);
+        } catch (err) {
+          if (!(err instanceof HttpError)) throw err;
+          whitelistError = err.code;
+        }
+      }
+      const properties = await propertiesOf(server);
+
       let reachable = true;
       let error: string | null = null;
       let list = null;
-      let lists: Pick<Overview, 'whitelist' | 'bans' | 'ipBans'> = {
-        whitelist: null,
-        bans: null,
-        ipBans: null,
-      };
-      try {
-        list = await tracker.poll(server.id);
-        const whitelist = parseWhitelist(await send(server.id, 'whitelist list'));
-        const known = [...(await tracker.knownNames(server.id)), ...(whitelist ?? [])];
-        lists = {
-          whitelist,
-          bans: parseBanList(await send(server.id, 'banlist players'), 'players', known),
-          ipBans: parseBanList(await send(server.id, 'banlist ips'), 'ips'),
-        };
-      } catch (err) {
-        if (!(err instanceof HttpError)) throw err;
-        reachable = false;
-        error = err.code;
+      let rconNames: string[] | null = null;
+      let bans: Overview['bans'] = null;
+      let ipBans: Overview['ipBans'] = null;
+      if (access.rcon) {
+        try {
+          list = await tracker.poll(server.id);
+          if (!access.read) rconNames = parseWhitelist(await send(server.id, 'whitelist list'));
+          const names = [
+            ...(await tracker.knownNames(server.id)),
+            ...(fileEntries ?? []).map((entry) => entry.name),
+            ...(rconNames ?? []),
+          ];
+          bans = parseBanList(await send(server.id, 'banlist players'), 'players', names);
+          ipBans = parseBanList(await send(server.id, 'banlist ips'), 'ips');
+        } catch (err) {
+          if (!(err instanceof HttpError)) throw err;
+          reachable = false;
+          error = err.code;
+        }
       }
       const since = await openSessions(server.id);
-      const { effective, detected, override } = await tracker.mode(server.id);
+      const mode = await modeOf(server, properties);
+      const known = await tracker.knownNames(server.id);
       return {
         reachable,
         error,
-        mode: { effective, detected, override },
+        mode,
+        rcon: access.rcon,
         max: list?.max ?? null,
         online: (list?.players ?? []).flatMap((player) =>
           player.uuid === null
             ? []
             : [{ uuid: player.uuid, name: player.name, since: iso(since.get(player.uuid)) }],
         ),
-        ...lists,
+        whitelist: whitelistView(access, properties, mode.effective, known, fileEntries, rconNames),
+        whitelistError,
+        bans,
+        ipBans,
         pending: await pendingOf(server.id),
       };
     },
@@ -279,25 +407,28 @@ function setup(ctx: PluginContext, pollIntervalMs: number): void {
     },
   });
 
-  /** A player action: validates, runs the command and records it in the audit log. */
+  /** A player action: validates, runs it and records it in the audit log. */
   function action<S extends z.ZodObject>(definition: {
     url: string;
     permission: string;
     body: S;
-    run(serverId: string, userId: string, body: z.output<S>): Promise<ActionResult>;
+    /** The capability checked before `run`; null when `run` checks what it needs itself. */
+    capability?: string | null;
+    run(server: ServerInfo, userId: string, body: z.output<S>): Promise<ActionResult>;
     audit: (
       body: z.output<S>,
       result: ActionResult,
     ) => { action: string; target: string; details?: Record<string, unknown> };
   }): void {
+    const needs = definition.capability === undefined ? capability : definition.capability;
     ctx.http.serverRoute({
       method: 'POST',
       url: definition.url,
       permission: definition.permission,
-      capability,
+      ...(needs !== null && { capability: needs }),
       schema: { body: definition.body, response: actionResultSchema },
       handler: async ({ server, user, body, ip }) => {
-        const outcome = await definition.run(server.id, user.id, body as z.output<S>);
+        const outcome = await definition.run(server, user.id, body as z.output<S>);
         const entry = definition.audit(body as z.output<S>, outcome);
         await ctx.audit.record({ ...entry, userId: user.id, serverId: server.id, ip });
         return outcome;
@@ -309,9 +440,9 @@ function setup(ctx: PluginContext, pollIntervalMs: number): void {
     url: '/kick',
     permission: PlayersPermission.kick,
     body: nameReasonRequestSchema,
-    run: async (serverId, _userId, { name, reason }) => {
+    run: async (server, _userId, { name, reason }) => {
       const text = normalizeReason(reason);
-      return result(await send(serverId, `kick ${name}${text ? ` ${text}` : ''}`));
+      return result(await send(server.id, `kick ${name}${text ? ` ${text}` : ''}`));
     },
     audit: ({ name, reason }) => ({
       action: 'kick',
@@ -324,13 +455,13 @@ function setup(ctx: PluginContext, pollIntervalMs: number): void {
     url: '/ban',
     permission: PlayersPermission.ban,
     body: nameReasonRequestSchema,
-    run: async (serverId, userId, { name, reason }) => {
+    run: async (server, userId, { name, reason }) => {
       const text = normalizeReason(reason);
-      if (await waitsForPlayer(serverId, name)) {
-        await addPending(serverId, userId, 'ban', name, text || null);
+      if (await waitsForPlayer(server, name)) {
+        await addPending(server.id, userId, 'ban', name, text || null);
         return result('', { pending: true });
       }
-      return result(await send(serverId, `ban ${name}${text ? ` ${text}` : ''}`));
+      return result(await send(server.id, `ban ${name}${text ? ` ${text}` : ''}`));
     },
     audit: ({ name, reason }, outcome) => ({
       action: outcome.pending ? 'pending_created' : 'ban',
@@ -343,7 +474,7 @@ function setup(ctx: PluginContext, pollIntervalMs: number): void {
     url: '/pardon',
     permission: PlayersPermission.ban,
     body: nameRequestSchema,
-    run: async (serverId, _userId, { name }) => result(await send(serverId, `pardon ${name}`)),
+    run: async (server, _userId, { name }) => result(await send(server.id, `pardon ${name}`)),
     audit: ({ name }) => ({ action: 'pardon', target: name }),
   });
 
@@ -351,9 +482,9 @@ function setup(ctx: PluginContext, pollIntervalMs: number): void {
     url: '/ban-ip',
     permission: PlayersPermission.ban,
     body: ipRequestSchema,
-    run: async (serverId, _userId, { ip, reason }) => {
+    run: async (server, _userId, { ip, reason }) => {
       const text = normalizeReason(reason);
-      return result(await send(serverId, `ban-ip ${ip}${text ? ` ${text}` : ''}`));
+      return result(await send(server.id, `ban-ip ${ip}${text ? ` ${text}` : ''}`));
     },
     audit: ({ ip, reason }) => ({
       action: 'ban_ip',
@@ -366,7 +497,7 @@ function setup(ctx: PluginContext, pollIntervalMs: number): void {
     url: '/pardon-ip',
     permission: PlayersPermission.ban,
     body: ipRequestSchema,
-    run: async (serverId, _userId, { ip }) => result(await send(serverId, `pardon-ip ${ip}`)),
+    run: async (server, _userId, { ip }) => result(await send(server.id, `pardon-ip ${ip}`)),
     audit: ({ ip }) => ({ action: 'pardon_ip', target: ip }),
   });
 
@@ -374,9 +505,28 @@ function setup(ctx: PluginContext, pollIntervalMs: number): void {
     url: '/whitelist/add',
     permission: PlayersPermission.whitelist,
     body: nameRequestSchema,
-    run: async (serverId, _userId, { name }) => {
-      const warn = await waitsForPlayer(serverId, name);
-      return result(await send(serverId, `whitelist add ${name}`), {
+    capability: null,
+    run: async (server, _userId, { name }) => {
+      const access = accessOf(server);
+      if (access.write && (await modeOf(server)).effective === 'offline') {
+        // Offline UUIDs come from the name, so Outpost writes the entry itself.
+        const player = properName(name, await tracker.knownNames(server.id));
+        await editWhitelist(server, (entries) => [
+          ...entries.filter((entry) => entry.name.toLowerCase() !== player.toLowerCase()),
+          { uuid: offlineUuid(player), name: player },
+        ]);
+        return reloadWhitelist(server);
+      }
+      // Other servers look the UUID up at Mojang, which only the server itself does here.
+      if (!access.rcon) {
+        throw new HttpError(
+          409,
+          'rcon_required',
+          'Adding players on this server needs RCON: the server looks their UUID up at Mojang',
+        );
+      }
+      const warn = await waitsForPlayer(server, name);
+      return result(await send(server.id, `whitelist add ${name}`), {
         warning: warn ? 'offline_unknown_player' : null,
       });
     },
@@ -387,8 +537,22 @@ function setup(ctx: PluginContext, pollIntervalMs: number): void {
     url: '/whitelist/remove',
     permission: PlayersPermission.whitelist,
     body: nameRequestSchema,
-    run: async (serverId, _userId, { name }) =>
-      result(await send(serverId, `whitelist remove ${name}`)),
+    capability: null,
+    run: async (server, _userId, { name }) => {
+      const access = accessOf(server);
+      if (access.write) {
+        await editWhitelist(server, (entries) => {
+          const kept = entries.filter((entry) => entry.name.toLowerCase() !== name.toLowerCase());
+          if (kept.length === entries.length) {
+            throw new HttpError(404, 'not_whitelisted', `${name} is not on the whitelist`);
+          }
+          return kept;
+        });
+        return reloadWhitelist(server);
+      }
+      if (!access.rcon) throw cannotChangeWhitelist();
+      return result(await send(server.id, `whitelist remove ${name}`));
+    },
     audit: ({ name }) => ({ action: 'whitelist_remove', target: name }),
   });
 
@@ -396,21 +560,59 @@ function setup(ctx: PluginContext, pollIntervalMs: number): void {
     url: '/whitelist/state',
     permission: PlayersPermission.whitelist,
     body: whitelistStateRequestSchema,
-    run: async (serverId, _userId, { enabled }) =>
-      result(await send(serverId, `whitelist ${enabled ? 'on' : 'off'}`)),
+    run: async (server, _userId, { enabled }) =>
+      result(await send(server.id, `whitelist ${enabled ? 'on' : 'off'}`)),
     audit: ({ enabled }) => ({ action: enabled ? 'whitelist_on' : 'whitelist_off', target: '' }),
+  });
+
+  // The UUID doctor: gives the entries of an offline-mode server the UUIDs of their names.
+  ctx.http.serverRoute({
+    method: 'POST',
+    url: '/whitelist/fix',
+    permission: PlayersPermission.whitelist,
+    capability: 'files.write',
+    schema: { response: actionResultSchema },
+    handler: async ({ server, user, ip }) => {
+      if ((await modeOf(server)).effective !== 'offline') {
+        throw new HttpError(
+          409,
+          'not_offline',
+          'Only whitelists of offline-mode servers can be fixed: other UUIDs come from Mojang',
+        );
+      }
+      const known = await tracker.knownNames(server.id);
+      const fixed: string[] = [];
+      await editWhitelist(server, (entries) => {
+        const next = entries.map((entry) => {
+          if (!hasWrongUuid(entry, 'offline', known)) return entry;
+          const name = properName(entry.name, known);
+          fixed.push(name);
+          return { ...entry, name, uuid: offlineUuid(name) };
+        });
+        return fixed.length === 0 ? null : next;
+      });
+      const outcome = fixed.length === 0 ? result('') : await reloadWhitelist(server);
+      await ctx.audit.record({
+        action: 'whitelist_fixed',
+        userId: user.id,
+        serverId: server.id,
+        ip,
+        details: { names: fixed },
+      });
+      return outcome;
+    },
   });
 
   action({
     url: '/op',
     permission: PlayersPermission.op,
     body: nameRequestSchema,
-    run: async (serverId, userId, { name }) => {
-      if (await waitsForPlayer(serverId, name)) {
-        await addPending(serverId, userId, 'op', name, null);
+    run: async (server, userId, { name }) => {
+      if (await waitsForPlayer(server, name)) {
+        await addPending(server.id, userId, 'op', name, null);
         return result('', { pending: true });
       }
-      return result(await send(serverId, `op ${name}`));
+      return result(await send(server.id, `op ${name}`));
     },
     audit: ({ name }, outcome) => ({
       action: outcome.pending ? 'pending_created' : 'op',
@@ -423,7 +625,7 @@ function setup(ctx: PluginContext, pollIntervalMs: number): void {
     url: '/deop',
     permission: PlayersPermission.op,
     body: nameRequestSchema,
-    run: async (serverId, _userId, { name }) => result(await send(serverId, `deop ${name}`)),
+    run: async (server, _userId, { name }) => result(await send(server.id, `deop ${name}`)),
     audit: ({ name }) => ({ action: 'deop', target: name }),
   });
 

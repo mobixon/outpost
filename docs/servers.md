@@ -86,8 +86,11 @@ refused.
 For games that write a log (`logs/latest.log` for Minecraft), the Files connector also gives
 `logs.stream`: Outpost follows the log while somebody watches it — a mounted folder every second,
 SFTP every two seconds — keeps its last 1000 lines and starts over when the server begins a new
-log. The **Console** shows it live. The offline-mode whitelist and the settings editor will build
-on the files next.
+log. The **Console** shows it live, and **Players** keeps the whitelist in `whitelist.json` (see
+[the whitelist](#whitelist)). The settings editor will build on the files next.
+
+Modules use only the files they declare: Players, for example, reads `server.properties` and
+writes `whitelist.json`, and Outpost refuses it any other path.
 
 ### Who connects
 
@@ -107,26 +110,59 @@ Limitations of the RCON connection:
 - without the Files connector the console shows the replies to commands, not the live server log;
 - on offline-mode servers, `whitelist add` for a player who has never joined stores the wrong
   (online) UUID, because Minecraft looks up unknown names at Mojang. Let such players join once with
-  the whitelist off; a module on top of the Files connector will fix this.
+  the whitelist off, or connect the Files connector with writing on: then Outpost writes the
+  whitelist itself (see [the whitelist](#whitelist)).
 
 ## Players
 
 The **Players** tab shows who is online and manages the whitelist, bans (of players and IP
-addresses), kicks and operator rights. It needs a connection.
+addresses), kicks and operator rights. It needs RCON or the Files connector; with the files alone
+it shows and changes only the whitelist.
 
 - Outpost asks every connected server who is online (`list uuids`) every 15 seconds, also while
   nobody has the page open. From that it keeps the history of every player: first and last seen,
   sessions and playtime, exact to about 15 seconds. RCON does not tell IP addresses or why a player
   left.
-- **Online or offline mode** is detected from the UUIDs of the players online (name-based UUIDs mean
-  offline mode) and can be set by hand by owners.
+- **Online or offline mode** is set by hand by owners, else detected from the UUIDs of the players
+  online (name-based UUIDs mean offline mode), else read from `online-mode` in `server.properties`
+  (Files connector). Behind a proxy such as Velocity `server.properties` says offline while the
+  players have Mojang UUIDs: Outpost goes by the players.
 - On **offline-mode** servers, Minecraft resolves the names of players who have never joined at
   Mojang, so a ban or operator rights given to them would apply to the wrong UUID. Outpost keeps
   such actions as **waiting for the player** and runs them as soon as the player comes online (a
   banned player can play for up to one poll interval); they can also be applied at once or
   cancelled. Adding such a player to the whitelist works, with a warning (see the limitations above).
-- Minecraft cannot tell over RCON whether the whitelist is on or who is an operator, so these are
-  actions only. Sessions are kept for 180 days; every action is written to the audit log.
+- Minecraft cannot tell over RCON who is an operator, so operator rights are actions only. Sessions
+  are kept for 180 days; every action is written to the audit log.
+
+### Whitelist
+
+Where the whitelist comes from and how it is changed depends on the connectors of the server:
+
+| Connectors                  | The list comes from | Changes                                                      |
+| --------------------------- | ------------------- | ------------------------------------------------------------ |
+| RCON only                   | `whitelist list`    | `whitelist add` and `remove` over RCON                       |
+| Files, writing on, and RCON | `whitelist.json`    | Outpost edits `whitelist.json` and runs `whitelist reload`   |
+| Files, writing on, no RCON  | `whitelist.json`    | Outpost edits `whitelist.json`; the server loads it on start |
+| Files read-only, and RCON   | `whitelist.json`    | over RCON                                                    |
+| Files read-only, no RCON    | `whitelist.json`    | none                                                         |
+
+- On **offline-mode** servers Outpost writes the UUID itself: the name-based UUID Minecraft gives
+  the player. It depends on the case of the name, so Outpost takes the spelling of players it has
+  seen; type the names of new players exactly as they spell them.
+- On **online-mode** servers the UUIDs are Mojang's. Outpost does not call the Mojang API: it adds
+  players over RCON, and the server looks them up, so adding needs RCON there; removing edits the
+  file.
+- The **UUID doctor** marks the entries whose players cannot join because of their UUID: Mojang
+  UUIDs on offline-mode servers (players whitelisted over RCON before they had joined), name-based
+  UUIDs of another spelling of the name, and name-based UUIDs on online-mode servers. On
+  offline-mode servers with writing on, **Fix UUIDs** gives these entries the UUIDs of their names.
+  Other UUIDs, such as those of Bedrock players through Floodgate, are left alone.
+- Whether the whitelist is on is read from `white-list` in `server.properties`; turning it on and
+  off needs RCON.
+- Outpost makes one change of `whitelist.json` at a time and replaces the file atomically. The
+  server rewrites the file when the whitelist is changed in the game, so a change made there at the
+  same moment can undo one made in Outpost.
 
 ## Scheduler
 
@@ -210,6 +246,7 @@ export default definePlugin({
   version: '1.0.0',
   apiVersion: PLUGIN_API_VERSION,
   games: ['minecraft-java'], // leave out for a module that works with any game
+  files: { read: ['server.properties'] }, // the files the module uses through ctx.files
   permissions: [{ key: 'greeter.greet', roles: ['owner', 'admin', 'moderator'] }],
   setup(ctx) {
     ctx.http.serverRoute({
@@ -232,6 +269,6 @@ before the handler runs. `games` lists the games a plugin supports (ids such as 
 also of games Outpost does not know yet); a plugin without `games` works with any game. Its tabs
 show only on servers of these games, and `ctx.servers.supports(server)` tells background jobs
 which servers are theirs. `ctx.commands.send(serverId, command)` runs a console command
-through the RCON connector (capability `commands.send`), `ctx.files` reads, writes, stats and lists the files of the server through the Files connector (`files.read`, `files.write`; paths relative to the server's folder), `ctx.logs` gives the recent lines of the server log and the new ones as they are written (`logs.stream`), `ctx.http.serverEvents` streams server-sent events to the browser with the same checks as a server route, `ctx.permissions.has()` checks a permission elsewhere (for example for live updates), and `ctx.secrets` encrypts secrets the plugin
+through the RCON connector (capability `commands.send`), `ctx.files` reads, writes, stats and lists the files of the server through the Files connector (`files.read`, `files.write`; paths relative to the server's folder) — only those the plugin declares in `files`, where `*` stands for any part of a name and `**` for any number of folders, and paths in `write` may also be read; other paths are refused with `403 file_out_of_scope`, and listings show only the declared files — `ctx.logs` gives the recent lines of the server log and the new ones as they are written (`logs.stream`), `ctx.http.serverEvents` streams server-sent events to the browser with the same checks as a server route, `ctx.permissions.has()` checks a permission elsewhere (for example for live updates), and `ctx.secrets` encrypts secrets the plugin
 stores. The web part of a plugin adds a tab to the server page with `serverTabs`, shown to users
 with the tab's permission.

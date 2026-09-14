@@ -1,6 +1,7 @@
 import { GAME_ID_PATTERN, isValidPluginId, ROLE_KEYS } from '@outpost/shared';
 import type { PluginContext } from './context.js';
 import type { Migration } from './db.js';
+import type { FileScopes } from './files.js';
 import { PERMISSION_KEY_PATTERN, type PermissionDeclaration } from './servers.js';
 
 /** Plugin API version implemented by this package. */
@@ -8,6 +9,19 @@ export const PLUGIN_API_VERSION = 1;
 
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 const MIGRATION_NAME_PATTERN = /^\d{4}_[a-z0-9_]+$/;
+const FILE_SCOPE_SEGMENT = /^(?:\*\*|[A-Za-z0-9_.*-]+)$/;
+
+/** A file scope is a relative path whose names may hold `*`, or are `**`. */
+const isValidFileScope = (scope: string) =>
+  scope
+    .split('/')
+    .every(
+      (segment) =>
+        FILE_SCOPE_SEGMENT.test(segment) &&
+        segment !== '.' &&
+        segment !== '..' &&
+        (segment === '**' || !segment.includes('**')),
+    );
 
 export interface PluginManifest {
   /** Unique id, e.g. `outpost.players` or `acme.discord-bridge`. */
@@ -29,6 +43,11 @@ export interface PluginDefinition extends PluginManifest {
    * any game. Outpost shows its server tabs and serves its server routes only for these games.
    */
   games?: readonly string[];
+  /**
+   * The files of a game server the plugin reads and writes through `ctx.files`, e.g.
+   * `{ read: ['server.properties'], write: ['whitelist.json'] }`. Outpost refuses other paths.
+   */
+  files?: FileScopes;
   /** Migrations for the plugin's own tables, in order. They run before `setup`. */
   migrations?: readonly Migration[];
   /** Server permissions the plugin adds, with the built-in roles that have them. */
@@ -84,6 +103,13 @@ export function definePlugin<T extends PluginDefinition>(plugin: T): T {
     throw new PluginDefinitionError(
       `Plugin "${plugin.id}" has an invalid list of games: expected unique ids like "minecraft-java"`,
     );
+  }
+  for (const scope of [...(plugin.files?.read ?? []), ...(plugin.files?.write ?? [])]) {
+    if (!isValidFileScope(scope)) {
+      throw new PluginDefinitionError(
+        `Plugin "${plugin.id}" has an invalid file scope "${scope}": expected a relative path like "whitelist.json" or "world/stats/*.json"`,
+      );
+    }
   }
   let previous = '';
   for (const migration of plugin.migrations ?? []) {

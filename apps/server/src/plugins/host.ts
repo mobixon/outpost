@@ -19,6 +19,7 @@ import type { AuditLog } from '../audit.js';
 import { SecretBox } from '../auth/crypto.js';
 import { CORE_SCOPE } from '../db/core-migrations.js';
 import { runMigrations } from '../db/migrator.js';
+import { scopedFiles } from '../files/scope.js';
 import type { CoreTables } from '../db/schema.js';
 import type { PermissionRegistry } from '../rbac/permissions.js';
 import { createKeyValueStore } from './kv.js';
@@ -221,7 +222,7 @@ export class PluginHost {
           supports: (server) => plugin.games === undefined || plugin.games.includes(server.game),
         },
         commands: this.#options.commands,
-        files: this.#options.files,
+        files: scopedFiles(plugin.id, plugin.files, this.#options.files),
         logs: this.#options.logs,
         permissions: { has: this.#options.hasPermission },
         secrets: {

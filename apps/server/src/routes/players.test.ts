@@ -1,4 +1,8 @@
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { createPlayersPlugin } from '@outpost/plugin-players/server';
+import { offlineUuid } from '@outpost/shared';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startFakeRconServer, type FakeRconServer } from '../connections/test-rcon-server.js';
@@ -17,6 +21,7 @@ function minecraft() {
     bans: [] as { name: string; reason: string }[],
     ipBans: [] as { ip: string; reason: string }[],
     ops: [] as string[],
+    reloads: 0,
   };
   const reply = (command: string): string => {
     const [verb = '', first = '', ...rest] = command.split(' ');
@@ -39,6 +44,10 @@ function minecraft() {
         if (first === 'remove') {
           state.whitelist = state.whitelist.filter((name) => name !== rest[0]);
           return `Removed ${rest[0]} from the whitelist`;
+        }
+        if (first === 'reload') {
+          state.reloads += 1;
+          return 'Reloaded the whitelist';
         }
         return `Whitelist is now turned ${first}`;
       case 'banlist': {
@@ -79,6 +88,7 @@ function minecraft() {
 let server: ReturnType<typeof minecraft>;
 let rcon: FakeRconServer;
 let app: FastifyInstance | undefined;
+let root: string;
 
 beforeEach(async () => {
   server = minecraft();
@@ -86,6 +96,9 @@ beforeEach(async () => {
     password: 'secret',
     reply: (command) => server.reply(command),
   });
+  root = await mkdtemp(path.join(tmpdir(), 'outpost-players-'));
+  await mkdir(path.join(root, 'survival'));
+  await writeProperties('online-mode=false\n');
 });
 
 afterEach(async () => {
@@ -93,11 +106,20 @@ afterEach(async () => {
   await app?.close();
   app = undefined;
   await rcon.close();
+  await rm(root, { recursive: true, force: true });
 });
 
-async function setUp() {
+const serverFile = (name: string) => path.join(root, 'survival', name);
+const writeProperties = (text: string) => writeFile(serverFile('server.properties'), text);
+const writeWhitelistFile = (entries: object[]) =>
+  writeFile(serverFile('whitelist.json'), JSON.stringify(entries));
+const whitelistFile = async () =>
+  JSON.parse(await readFile(serverFile('whitelist.json'), 'utf8')) as unknown;
+
+/** A server with RCON (unless `rcon` is false) and, if given, the Files connector. */
+async function setUp(options: { rcon?: boolean; files?: 'read' | 'write' } = {}) {
   app = await startTestApp({
-    env: { OUTPOST_REQUIRE_2FA_FOR_ADMINS: 'false' },
+    env: { OUTPOST_REQUIRE_2FA_FOR_ADMINS: 'false', OUTPOST_FILES_ROOT: root },
     plugins: [createPlayersPlugin({ pollIntervalMs: 0 })],
   });
   const outpost = app;
@@ -107,15 +129,24 @@ async function setUp() {
     body: { name: 'Survival', slug: 'survival', game: 'minecraft-java' },
   });
   const serverId = created.json<{ id: string }>().id;
-  await send(outpost, 'PUT', `/api/v1/servers/${serverId}/connection`, {
-    cookie: admin,
-    body: {
-      type: 'rcon',
-      host: '127.0.0.1',
-      port: rcon.port,
-      password: 'secret',
-    },
-  });
+  if (options.rcon ?? true) {
+    await send(outpost, 'PUT', `/api/v1/servers/${serverId}/connection`, {
+      cookie: admin,
+      body: {
+        type: 'rcon',
+        host: '127.0.0.1',
+        port: rcon.port,
+        password: 'secret',
+      },
+    });
+  }
+  if (options.files !== undefined) {
+    const saved = await send(outpost, 'PUT', `/api/v1/servers/${serverId}/files`, {
+      cookie: admin,
+      body: { source: 'folder', path: 'survival', writable: options.files === 'write' },
+    });
+    expect(saved.statusCode).toBe(204);
+  }
   const member = (username: string, role: string) =>
     createUserWithInvitation(outpost, admin, username, { serverId, role });
   const [moderator, viewer] = await Promise.all([
@@ -248,6 +279,7 @@ describe('players', () => {
     expect((await overview()).mode).toEqual({
       effective: 'online',
       detected: 'offline',
+      configured: null,
       override: 'online',
     });
     expect((await act('/whitelist/add', { name: 'Other' })).json()).toMatchObject({
@@ -255,7 +287,18 @@ describe('players', () => {
     });
     expect((await act('/ban', { name: 'Nobody' })).json()).toMatchObject({ pending: false });
 
-    expect((await overview()).whitelist).toEqual(['Newbie', 'Steve', 'Other']);
+    expect((await overview()).whitelist).toEqual({
+      source: 'rcon',
+      change: 'rcon',
+      enabled: null,
+      reloads: true,
+      fixable: false,
+      entries: ['Newbie', 'Steve', 'Other'].map((name) => ({
+        name,
+        uuid: null,
+        wrongUuid: false,
+      })),
+    });
     expect((await act('/whitelist/remove', { name: 'Other' })).json()).toMatchObject({
       reply: 'Removed Other from the whitelist',
     });
@@ -297,6 +340,125 @@ describe('players', () => {
     expect((await act('/op', { name: 'Alex' }, moderator.cookie)).statusCode).toBe(403);
     expect((await act('/ban', { name: 'bad name; op me' })).statusCode).toBe(400);
     expect((await act('/ban-ip', { ip: 'not-an-ip' })).statusCode).toBe(400);
+  });
+
+  it('write offline UUIDs to whitelist.json, reload it and fix wrong entries', async () => {
+    await writeProperties('online-mode=false\nwhite-list=true\n');
+    // Whitelisted over RCON before joining: Minecraft stored the Mojang UUID.
+    await writeWhitelistFile([{ uuid: ALEX.uuid, name: 'Newbie' }]);
+    const { outpost, admin, serverId, overview, act } = await setUp({ files: 'write' });
+
+    expect(await overview()).toMatchObject({
+      rcon: true,
+      mode: { effective: 'offline', detected: null, configured: 'offline', override: null },
+      whitelist: {
+        source: 'file',
+        change: 'file',
+        enabled: true,
+        reloads: true,
+        fixable: true,
+        entries: [{ name: 'Newbie', uuid: ALEX.uuid, wrongUuid: true }],
+      },
+      whitelistError: null,
+    });
+
+    // Steve has joined, so his spelling is known; the UUID comes from it.
+    server.state.online = [{ name: 'Steve', uuid: offlineUuid('Steve') }];
+    await overview();
+    expect((await act('/whitelist/add', { name: 'steve' })).json()).toEqual({
+      reply: 'Reloaded the whitelist',
+      pending: false,
+      warning: null,
+    });
+    expect(server.state.whitelist).toEqual([]);
+    expect(await whitelistFile()).toEqual([
+      { uuid: ALEX.uuid, name: 'Newbie' },
+      { uuid: offlineUuid('Steve'), name: 'Steve' },
+    ]);
+
+    expect((await act('/whitelist/fix', {})).json()).toMatchObject({
+      reply: 'Reloaded the whitelist',
+    });
+    expect(await whitelistFile()).toEqual([
+      { uuid: offlineUuid('Newbie'), name: 'Newbie' },
+      { uuid: offlineUuid('Steve'), name: 'Steve' },
+    ]);
+    expect((await overview()).whitelist).toMatchObject({
+      fixable: false,
+      entries: [{ wrongUuid: false }, { wrongUuid: false }],
+    });
+
+    expect((await act('/whitelist/remove', { name: 'NEWBIE' })).statusCode).toBe(200);
+    expect(await whitelistFile()).toEqual([{ uuid: offlineUuid('Steve'), name: 'Steve' }]);
+    expect((await act('/whitelist/remove', { name: 'Nobody' })).json()).toMatchObject({
+      error: { code: 'not_whitelisted' },
+    });
+    expect(server.state.reloads).toBe(3);
+
+    const audit = await get(
+      outpost,
+      `/api/v1/audit?serverId=${serverId}&action=outpost.players.whitelist_fixed`,
+      admin,
+    );
+    expect(audit.json()).toMatchObject({ entries: [{ details: { names: ['Newbie'] } }] });
+  });
+
+  it('without RCON, apply changes at the next start and need RCON for online-mode servers', async () => {
+    const { overview, act } = await setUp({ rcon: false, files: 'write' });
+
+    expect(await overview()).toMatchObject({
+      reachable: true,
+      rcon: false,
+      online: [],
+      bans: null,
+      whitelist: { source: 'file', change: 'file', enabled: false, reloads: false, entries: [] },
+    });
+    expect((await act('/whitelist/add', { name: 'Alex' })).json()).toEqual({
+      reply: '',
+      pending: false,
+      warning: 'applies_on_restart',
+    });
+    expect(await whitelistFile()).toEqual([{ uuid: offlineUuid('Alex'), name: 'Alex' }]);
+    expect((await act('/kick', { name: 'Alex' })).json()).toMatchObject({
+      error: { code: 'capability_missing' },
+    });
+
+    await writeProperties('online-mode=true\n');
+    expect((await act('/whitelist/add', { name: 'Bob' })).json()).toMatchObject({
+      error: { code: 'rcon_required' },
+    });
+    expect((await act('/whitelist/fix', {})).json()).toMatchObject({
+      error: { code: 'not_offline' },
+    });
+  });
+
+  it('read the list from read-only files and change it over RCON', async () => {
+    await writeWhitelistFile([{ uuid: ALEX.uuid, name: 'Newbie' }]);
+    const { overview, act } = await setUp({ files: 'read' });
+
+    expect((await overview()).whitelist).toEqual({
+      source: 'file',
+      change: 'rcon',
+      enabled: false,
+      reloads: true,
+      fixable: false,
+      entries: [{ name: 'Newbie', uuid: ALEX.uuid, wrongUuid: true }],
+    });
+    expect((await act('/whitelist/add', { name: 'Other' })).json()).toEqual({
+      reply: 'Added Other to the whitelist',
+      pending: false,
+      warning: 'offline_unknown_player',
+    });
+    expect(server.state.whitelist).toEqual(['Other']);
+    expect((await act('/whitelist/fix', {})).json()).toMatchObject({
+      error: { code: 'capability_missing' },
+    });
+
+    await writeFile(serverFile('whitelist.json'), '{ not json');
+    expect(await overview()).toMatchObject({
+      whitelist: null,
+      whitelistError: 'whitelist_invalid',
+    });
   });
 
   it('report an unreachable server but keep the pending actions', async () => {
