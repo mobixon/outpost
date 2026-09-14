@@ -14,6 +14,7 @@
     "@lucide/vue": "^1.45.0",
     "@outpost/plugin-about": "workspace:*",
     "@outpost/plugin-console": "workspace:*",
+    "@outpost/plugin-player-details": "workspace:*",
     "@outpost/plugin-players": "workspace:*",
     "@outpost/plugin-scheduler": "workspace:*",
     "@outpost/shared": "workspace:*",

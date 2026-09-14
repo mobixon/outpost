@@ -25,7 +25,8 @@ two-factor login and an audit log.
 
 - **Made for Minecraft.** A console with command completion and a command history kept in your
   account; players online, history, bans, kicks and operators, aware of offline-mode servers; a
-  whitelist that gets the UUIDs right, with a doctor for broken entries; scheduled commands and
+  whitelist that gets the UUIDs right, with a doctor for broken entries; the inventories, ender
+  chests, statistics and advancements of players, read from the world; scheduled commands and
   rotating chat announcements.
 - **Live log.** The console shows the server log as the server writes it, coloured by level, and
   picks up where it left off after a lost connection. Viewers never see it, since it holds the
@@ -58,8 +59,9 @@ two-factor login and an audit log.
   </tr>
 </table>
 
-> **Version 0.2** runs a real Minecraft server in production and adds the whitelist in
-> `whitelist.json`. The [project plan](docs/PLAN.md) describes what comes next.
+> **Version 0.3** runs a real Minecraft server in production and adds the inventories,
+> statistics and advancements of players. The [project plan](docs/PLAN.md) describes what comes
+> next.
 
 ## Install next to your server
 
@@ -79,7 +81,7 @@ services:
       - minecraft-data:/data
 
   outpost:
-    image: ghcr.io/mobixon/outpost:0.2.0
+    image: ghcr.io/mobixon/outpost:0.3.0
     restart: unless-stopped
     ports:
       - '127.0.0.1:3000:3000'
