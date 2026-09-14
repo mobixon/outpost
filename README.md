@@ -59,8 +59,9 @@ two-factor login and an audit log.
   </tr>
 </table>
 
-> **Version 0.2** runs a real Minecraft server in production and adds the whitelist in
-> `whitelist.json`. The [project plan](docs/PLAN.md) describes what comes next.
+> **Version 0.3** runs a real Minecraft server in production and adds the inventories,
+> statistics and advancements of players. The [project plan](docs/PLAN.md) describes what comes
+> next.
 
 ## Install next to your server
 
@@ -80,7 +81,7 @@ services:
       - minecraft-data:/data
 
   outpost:
-    image: ghcr.io/mobixon/outpost:0.2.0
+    image: ghcr.io/mobixon/outpost:0.3.0
     restart: unless-stopped
     ports:
       - '127.0.0.1:3000:3000'
