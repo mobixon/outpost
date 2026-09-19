@@ -8,6 +8,7 @@ import {
   type CompetitionEvent,
   type EventInput,
   type Messages,
+  type Metric,
   type PlayerRef,
 } from '../shared.js';
 
@@ -25,6 +26,8 @@ export interface EditorForm {
   /** `2026-09-28T18:00` */
   start: string;
   end: string;
+  /** What is counted. */
+  metric: Metric['kind'];
   presets: BlockPreset[];
   /** One block id or pattern per line or comma. */
   blocks: string;
@@ -46,6 +49,7 @@ export function emptyForm(timezone: string, now = Date.now()): EditorForm {
     timezone,
     start: instantToZoned(start, timezone),
     end: instantToZoned(start + PERIODS[1].hours * HOUR_MS, timezone),
+    metric: 'mined',
     presets: ['wood'],
     blocks: '',
     top: 3,
@@ -66,8 +70,9 @@ export function fromEvent(event: CompetitionEvent): EditorForm {
     timezone: event.timezone,
     start: instantToZoned(Date.parse(event.startsAt), event.timezone),
     end: instantToZoned(Date.parse(event.endsAt), event.timezone),
-    presets: [...event.metric.presets],
-    blocks: event.metric.blocks.join('\n'),
+    metric: event.metric.kind,
+    presets: event.metric.kind === 'mined' ? [...event.metric.presets] : ['wood'],
+    blocks: event.metric.kind === 'mined' ? event.metric.blocks.join('\n') : '',
     top: event.participants.top,
     excludeOperators: event.participants.excludeOperators,
     excluded: event.participants.excluded.map(({ uuid, name }) => ({ uuid, name })),
@@ -117,9 +122,11 @@ export function problemsOf(form: EditorForm): string[] {
   const start = zonedToInstant(form.start, form.timezone);
   const end = zonedToInstant(form.end, form.timezone);
   if (Number.isNaN(start) || Number.isNaN(end) || end <= start) problems.push('period');
-  const blocks = parseBlocks(form.blocks);
-  if (form.presets.length === 0 && blocks.length === 0) problems.push('metric');
-  if (!blocks.every(isValidBlockPattern)) problems.push('blocks');
+  if (form.metric === 'mined') {
+    const blocks = parseBlocks(form.blocks);
+    if (form.presets.length === 0 && blocks.length === 0) problems.push('metric');
+    if (!blocks.every(isValidBlockPattern)) problems.push('blocks');
+  }
   return problems;
 }
 
@@ -137,7 +144,10 @@ export function toInput(form: EditorForm): EventInput | null {
     timezone: form.timezone.trim(),
     startsAt: new Date(start).toISOString(),
     endsAt: new Date(end).toISOString(),
-    metric: { kind: 'mined', presets: form.presets, blocks: parseBlocks(form.blocks) },
+    metric:
+      form.metric === 'mined'
+        ? { kind: 'mined', presets: form.presets, blocks: parseBlocks(form.blocks) }
+        : { kind: 'fish_caught' },
     scoring: { kind: 'sum' },
     participants: {
       top: form.top,

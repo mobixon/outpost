@@ -310,6 +310,9 @@ describe('competitions', () => {
     ).toBe(400);
     expect((await post(definition(), viewer.cookie)).statusCode).toBe(403);
 
+    // What is counted can also be the fish caught, which needs no blocks.
+    expect((await post(definition({ metric: { kind: 'fish_caught' } }))).statusCode).toBe(200);
+
     // A future competition can be changed and deleted; running ones must be cancelled first.
     const future = definition({
       startsAt: new Date(Date.now() + 3_600_000).toISOString(),

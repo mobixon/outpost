@@ -93,12 +93,20 @@ const minedMetricSchema = z.object({
     )
     .max(MAX_BLOCKS),
 });
-/** What is counted; more kinds can join this list. */
-export const metricSchema = z.discriminatedUnion('kind', [minedMetricSchema]);
-export type Metric = z.infer<typeof metricSchema>;
+/** Fishing catches, as the game counts them (`custom: fish_caught`). */
+const fishCaughtMetricSchema = z.object({ kind: z.literal('fish_caught') });
 
-/** The block patterns of a metric. */
+/** What is counted; more kinds can join this list. */
+export const metricSchema = z.discriminatedUnion('kind', [
+  minedMetricSchema,
+  fishCaughtMetricSchema,
+]);
+export type Metric = z.infer<typeof metricSchema>;
+export const METRIC_KINDS = ['mined', 'fish_caught'] as const satisfies readonly Metric['kind'][];
+
+/** The block patterns of a metric that counts blocks; none for the others. */
 export function metricPatterns(metric: Metric): string[] {
+  if (metric.kind !== 'mined') return [];
   return [
     ...new Set([
       ...metric.presets.flatMap((preset) => BLOCK_PRESETS[preset]),
@@ -106,6 +114,10 @@ export function metricPatterns(metric: Metric): string[] {
     ]),
   ];
 }
+
+/** Whether a metric says what it counts: a metric of blocks needs at least one. */
+export const metricIsComplete = (metric: Metric) =>
+  metric.kind !== 'mined' || metricPatterns(metric).length > 0;
 
 /** How a counter becomes a score; more kinds can join this list. */
 export const scoringSchema = z.discriminatedUnion('kind', [
@@ -310,7 +322,7 @@ export const eventInputSchema = eventFields.superRefine((event, context) => {
       message: `A competition lasts at most ${MAX_DURATION_DAYS} days`,
     });
   }
-  if (metricPatterns(event.metric).length === 0) {
+  if (!metricIsComplete(event.metric)) {
     context.addIssue({ code: 'custom', path: ['metric'], message: 'Pick what is counted' });
   }
   const places = new Set<number>();

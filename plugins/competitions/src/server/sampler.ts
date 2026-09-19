@@ -1,8 +1,21 @@
-import type { PluginContext } from '@outpost/plugin-api';
+import type { PlayerStats, PluginContext } from '@outpost/plugin-api';
 import { blockMatcher, type Metric, metricPatterns } from '../shared.js';
 
 /** How many files of players are read at once. */
 const PARALLEL_READS = 6;
+
+/** How the counter of a metric is read from the statistics of a player. */
+function counterOf(metric: Metric): (stats: PlayerStats) => number {
+  if (metric.kind === 'fish_caught') return (stats) => stats.custom?.['minecraft:fish_caught'] ?? 0;
+  const matches = blockMatcher(metricPatterns(metric));
+  return (stats) => {
+    let total = 0;
+    for (const [id, count] of Object.entries(stats.mined ?? {})) {
+      if (matches(id)) total += count;
+    }
+    return total;
+  };
+}
 
 interface Cached {
   modifiedAt: number;
@@ -32,7 +45,7 @@ export class Sampler {
     metric: Metric,
     options: { fresh?: boolean } = {},
   ): Promise<Counters> {
-    const matches = blockMatcher(metricPatterns(metric));
+    const counter = counterOf(metric);
     const files = await this.ctx.stats.list(serverId);
     const cached = options.fresh === true ? new Map<string, Cached>() : this.#cacheOf(cacheKey);
     const next = new Map<string, Cached>();
@@ -48,10 +61,7 @@ export class Sampler {
           value = known.value;
         } else {
           const stats = await this.ctx.stats.read(serverId, file.uuid);
-          value = 0;
-          for (const [id, count] of Object.entries(stats?.mined ?? {})) {
-            if (matches(id)) value += count;
-          }
+          value = stats === null ? 0 : counter(stats);
         }
         next.set(file.uuid, { modifiedAt, value });
         totals.set(file.uuid, value);

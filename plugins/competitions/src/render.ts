@@ -38,6 +38,7 @@ export const formatScore = (score: number) => score.toLocaleString('en-US');
 
 /** What is counted, in a few words. */
 export function metricLabel(metric: Metric): string {
+  if (metric.kind === 'fish_caught') return 'Fish caught';
   const parts: string[] = [...metric.presets];
   if (metric.blocks.length > 0) parts.push(`${metric.blocks.length} other`);
   return `Mined: ${parts.join(', ')}`;

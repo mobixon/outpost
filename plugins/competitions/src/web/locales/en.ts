@@ -22,6 +22,7 @@ export default {
     },
     metric: {
       mined: 'Blocks mined',
+      fish_caught: 'Fish caught',
       presets: { wood: 'Wood', stone: 'Stone', ores: 'Ores', earth: 'Earth' },
       other: '{count} more blocks',
     },
@@ -96,6 +97,9 @@ export default {
       periods: { twoDays: '2 days', week: '1 week', twoWeeks: '2 weeks' },
       periodHint: 'The end can be any date and time. A start in the past begins the event at once.',
       lockedRunning: 'What is counted and the start cannot change once the event has started.',
+      metric: 'What is counted',
+      fishHint:
+        'Counts the fishing catches of the game (its own fish caught counter). Nothing to place and break again, so it cannot be farmed with silk touch.',
       counting: 'What counts',
       presets: 'Blocks',
       blocks: 'More blocks',
