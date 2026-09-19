@@ -92,6 +92,18 @@ log. The **Console** shows it live, and **Players** keeps the whitelist in `whit
 Modules use only the files they declare: Players, for example, reads `server.properties` and
 writes `whitelist.json`, and Outpost refuses it any other path.
 
+### What modules get on top of the connectors
+
+Some capabilities need a connector and a game that Outpost knows how to serve; for Minecraft they
+come with the connectors:
+
+| Capability           | Needs | What it gives modules                                              |
+| -------------------- | ----- | ------------------------------------------------------------------ |
+| `game.events`        | Files | chat messages, joins and leaves of players, read from the live log |
+| `stats.read`         | Files | the statistics of the players from the world                       |
+| `chat.tell`          | RCON  | messages to one player or to everyone, with `&` colors             |
+| `players.whenOnline` | RCON  | things to do when a player is online, which wait through restarts  |
+
 ### Who connects
 
 Only superadmins change connectors, because a connector points Outpost at a host or a folder of its
@@ -217,6 +229,55 @@ The **Scheduler** tab runs tasks on a schedule. It needs a connection.
 - The `stop` command shuts the server down. It starts again only if its container is restarted
   automatically, as CapRover and Docker with a restart policy do.
 
+## Events
+
+The **Events** tab runs timed competitions between players on a server. It needs the Files
+connector to count and RCON to talk to the players and to give rewards. The first kind counts how
+many blocks each player mines — the weekly top three wood cutters, for example.
+
+- An event has a **period**: it starts and ends at the date and time you pick, in a time zone you
+  choose. The editor offers 2 days, 1 week and 2 weeks as shortcuts; the end can be any moment. An
+  event that starts in the past begins at once.
+- **What is counted** is picked from groups of blocks (wood, stone, ores, earth) and any block ids
+  of your own, where `*` stands for any part of a name (`minecraft:cherry_log`, `*_log`). The score
+  of a player is what their counter grew by from the start to the end: mining at the start and at
+  the end is read from the statistics of the world, so no plugin or mod is needed.
+- **Who takes part**: the top `N` places count. Operators (from `ops.json`) can be left out with a
+  checkbox, and single players can be left out by picking them from the players Outpost knows.
+  Of two players with one score the one who reached it first is ahead.
+- The **standings** are counted every five minutes while the event runs, so the page and the chat
+  answer can be a few minutes behind. The server writes the statistics of a player when they leave
+  and at every autosave, which adds a few minutes more. At the end Outpost makes the server save
+  the world (`save-all flush`), counts once more from fresh files and freezes the result.
+- **Players** can type a chat command, `!top` by default, to see the standings, with their own
+  place; they answer only to the player who asked. A player who joins is shown a notice about the
+  running event (once per 30 minutes at most). At the end the results are announced to everyone.
+  All these texts are yours: the description of the event, the answer to the command, the line of
+  one place, the notice, the announcement and the message to a winner, with `&` color codes and
+  `{placeholders}` (`{event}`, `{description}`, `{metric}`, `{ends_at}`, `{ends_in}`, `{top}`,
+  `{player}`, `{your_place}`, `{your_score}`) and a preview in the editor. Messages are in English
+  unless you write them otherwise.
+- **Rewards** are console commands for the winner of each place, such as `give {player} diamond 5`,
+  with `{player}`, `{uuid}`, `{place}`, `{score}` and `{event}` filled in. A command runs when the
+  winner is online, so a winner who is away gets it on joining. Every command has a status on the
+  event page (waiting for the player, given, failed) and can be tried again or given up. A command
+  the server refuses with a syntax error fails at once; the names of players are checked before
+  they go into a command.
+- The chat command and the notices need the log of the server (`game.events`), which Outpost
+  follows on servers that have a running event or rewards waiting. It reads the formats of vanilla,
+  Fabric and Paper; a server with a plugin that changes the chat format may not be understood.
+- What is counted and the start cannot change once an event has started; the end, the texts, the
+  places and the rewards can. A running event can be cancelled, which gives no result and no
+  rewards. If Outpost was not running when an event should have started, it starts counting when
+  it can and warns that what happened before is not counted.
+- Everyone on the server sees the events and their standings; only those who manage events see
+  the commands of the rewards. Owners and admins manage events and rewards. Rewards run console
+  commands, so setting them needs the right to run console commands (`console.execute`) besides
+  managing events. Creating, changing, cancelling and deleting events and rewards are written to the
+  audit log.
+- Counts are of what the game writes as `mined`: breaking a block counts, whatever it is broken
+  with, and so does a block that was placed and broken again. Outpost cannot tell these apart.
+
 ## Roles
 
 | Permission                                                           | Owner | Admin | Moderator | Viewer |
@@ -236,12 +297,15 @@ The **Scheduler** tab runs tasks on a schedule. It needs a connection.
 | See where players are and died (`player-details.location`)           |   ✓   |   ✓   |           |        |
 | See the scheduled tasks and their runs (`scheduler.view`)            |   ✓   |   ✓   |     ✓     |   ✓    |
 | Create, change, run and delete tasks (`scheduler.manage`)            |   ✓   |   ✓   |           |        |
+| See events and their standings (`competitions.view`)                 |   ✓   |   ✓   |     ✓     |   ✓    |
+| Create, change, cancel and delete events (`competitions.manage`)     |   ✓   |   ✓   |           |        |
+| Try rewards again and give them up (`competitions.rewards`)          |   ✓   |   ✓   |           |        |
 
 ¹ Admins manage only moderators and viewers: they can add, change, remove and invite people with
 these roles, but cannot touch owners and other admins. Owners manage every role, including other
 owners.
 
-The console, player and scheduler permissions come from their modules: modules add their own
+The console, player, scheduler and event permissions come from their modules: modules add their own
 permissions with the roles that have them.
 
 **Superadmins** are the administrators of the whole Outpost instance. They have every permission
@@ -306,3 +370,27 @@ which servers are theirs. `ctx.commands.send(serverId, command)` runs a console 
 through the RCON connector (capability `commands.send`), `ctx.files` reads, writes, stats and lists the files of the server through the Files connector (`files.read`, `files.write`; paths relative to the server's folder) — only those the plugin declares in `files`, where `*` stands for any part of a name and `**` for any number of folders, and paths in `write` may also be read; other paths are refused with `403 file_out_of_scope`, and listings show only the declared files — `ctx.logs` gives the recent lines of the server log and the new ones as they are written (`logs.stream`), `ctx.http.serverEvents` streams server-sent events to the browser with the same checks as a server route, `ctx.permissions.has()` checks a permission elsewhere (for example for live updates), and `ctx.secrets` encrypts secrets the plugin
 stores. The web part of a plugin adds a tab to the server page with `serverTabs`, shown to users
 with the tab's permission.
+
+More services of the platform, each with its capability (see above):
+
+- `ctx.gameEvents.subscribe(serverId, listener)` calls the listener with what players do as the
+  log tells: `{ type: 'chat', player, message }`, `{ type: 'joined', player }` and
+  `{ type: 'left', player }`. The log is read once per server however many modules listen, and
+  followed again after its connector changed.
+- `ctx.chat.tell(serverId, player, message)` and `ctx.chat.broadcast(serverId, message)` send a
+  message with `&` colors through `tellraw`, with the JSON built by Outpost: neither the name nor
+  the text can change the command. `@outpost/shared` has the helpers behind it (`parseMessage`,
+  `tellrawCommand`, `renderTemplate` for `{placeholders}`).
+- `ctx.stats` gives the statistics of the players: `list(serverId)` the players with the time
+  their file was written, `read(serverId, uuid)` their counters (`mined`, `killed`, …), and
+  `flush(serverId)` makes the server write them (`save-all flush`).
+- `ctx.playerTasks` keeps things to do when a player is online, in the database: a plugin registers
+  a handler for a kind of task with `handle(kind, handler)` during `setup`, adds tasks with
+  `enqueue(...)`, and lists, retries (`retry`) and cancels (`cancel`) them. Outpost asks the
+  servers who is online every 10 seconds; a plugin that follows joins can call `playerJoined()`
+  to run a player's tasks at once. A handler that throws is tried again after a while, up to five
+  times; a `PlayerTaskError` gives up at once.
+- `ctx.services` lets plugins offer each other services: `provide(name, service)` during `setup`,
+  `get(name)` in a plugin that lists the provider in `dependsOn` (`'outpost.players?'` when it is
+  optional). A plugin types its service by adding to `OutpostServices` by declaration merging; the
+  Players module offers `outpost.players` with `online(serverId)` and `known(serverId)`.

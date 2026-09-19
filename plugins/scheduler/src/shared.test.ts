@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  announcementCommand,
   isValidCron,
   isValidTimezone,
   nextRuns,
   normalizeLines,
-  parseMessage,
   taskInputSchema,
 } from './shared.js';
 
@@ -81,24 +79,5 @@ describe('task lines', () => {
     expect(valid('announcement', ['x'.repeat(257)])).toBe(false);
     // Short enough, but every code adds a component to the command.
     expect(valid('announcement', ['&l'.repeat(40) + '&ax&b'.repeat(40)])).toBe(false);
-  });
-});
-
-describe('announcements', () => {
-  it('turn & codes into formatting', () => {
-    expect(parseMessage('&6Gold &lbold&r plain & more &zx')).toEqual([
-      { text: 'Gold ', color: { name: 'gold', hex: '#ffaa00' } },
-      { text: 'bold', color: { name: 'gold', hex: '#ffaa00' }, bold: true },
-      { text: ' plain & more &zx' },
-    ]);
-  });
-
-  it('are sent with tellraw, so nothing in them changes the command', () => {
-    const command = announcementCommand('&cRed "quoted" ]} @a\nnext');
-    expect(command.startsWith('tellraw @a [')).toBe(true);
-    expect(JSON.parse(command.slice('tellraw @a '.length))).toEqual([
-      '',
-      { text: 'Red "quoted" ]} @a next', color: 'red' },
-    ]);
   });
 });

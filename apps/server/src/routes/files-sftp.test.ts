@@ -109,7 +109,7 @@ describe.skipIf(server === undefined)('the Files connector over SFTP', { timeout
     expect(state.body).not.toContain(secret);
     expect((await get(outpost, `/api/v1/servers/${serverId}`, owner.cookie)).json()).toMatchObject({
       connectors: ['files'],
-      capabilities: ['files.read', 'files.write', 'logs.stream'],
+      capabilities: ['files.read', 'files.write', 'logs.stream', 'game.events', 'stats.read'],
     });
 
     expect((await probe('GET', '/properties')).json()).toEqual({

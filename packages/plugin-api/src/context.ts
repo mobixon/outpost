@@ -2,9 +2,13 @@ import type { PluginInfo } from '@outpost/shared';
 import type { Kysely } from 'kysely';
 import type { EventBus } from './events.js';
 import type { FileEntry, FileStat } from './files.js';
-import type { LogLine } from './logs.js';
+import type { GameEvents } from './game-events.js';
 import type { HttpRegistry } from './http.js';
+import type { LogLine } from './logs.js';
+import type { PlayerTasks } from './player-tasks.js';
 import type { ServerInfo } from './servers.js';
+import type { Services } from './services.js';
+import type { PlayerStatistics } from './stats.js';
 
 export interface PluginLogger {
   debug(message: string, details?: Record<string, unknown>): void;
@@ -86,6 +90,30 @@ export interface PluginContext {
      */
     subscribe(serverId: string, listener: (lines: LogLine[]) => void): Promise<() => void>;
   };
+  /**
+   * What players do on the game server, read from its log. Needs the capability `game.events`
+   * (the Files connector of a game that writes a log).
+   */
+  readonly gameEvents: GameEvents;
+  /**
+   * Messages to players in the chat of the game. Needs the capability `chat.tell` (RCON); throws
+   * an HttpError 409 without it and 400 for a name that cannot be a player's or a message that is
+   * too long. `&` codes color and style the text (`&6` gold, `&c` red, `&l` bold, `&r` reset).
+   */
+  readonly chat: {
+    tell(serverId: string, player: string, message: string): Promise<void>;
+    /** Shows the message to everyone online. */
+    broadcast(serverId: string, message: string): Promise<void>;
+  };
+  /** The statistics of the players. Needs the capability `stats.read` (the Files connector). */
+  readonly stats: PlayerStatistics;
+  /**
+   * Things to do when a player is online, which survive a restart of Outpost. Needs the
+   * capability `players.whenOnline` (RCON) to notice who is online.
+   */
+  readonly playerTasks: PlayerTasks;
+  /** Services the plugins offer each other. */
+  readonly services: Services;
   readonly permissions: {
     /** Whether the user has the permission on the server; superadmins have all. */
     has(userId: string, serverId: string, permission: string): Promise<boolean>;

@@ -13,6 +13,7 @@ export interface CoreTables {
   user_identities: UserIdentitiesTable;
   invitations: InvitationsTable;
   audit_log: AuditLogTable;
+  player_tasks: PlayerTasksTable;
 }
 
 export interface MigrationsTable {
@@ -152,4 +153,24 @@ export interface AuditLogTable {
   /** JSON */
   details: string | null;
   ip: string | null;
+}
+
+/** Things plugins do when a player is online (`ctx.playerTasks`). */
+export interface PlayerTasksTable {
+  id: string;
+  plugin_id: string;
+  server_id: string;
+  /** Lowercase, with dashes. */
+  player_uuid: string;
+  player_name: string;
+  kind: string;
+  /** JSON */
+  payload: string;
+  status: 'pending' | 'done' | 'failed' | 'cancelled';
+  attempts: number;
+  error: string | null;
+  /** Not tried again before this time. */
+  retry_at: number;
+  created_at: number;
+  updated_at: number;
 }

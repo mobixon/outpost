@@ -84,7 +84,7 @@ describe('server connections', () => {
     expect((await get(server, `/api/v1/servers/${serverId}`, owner.cookie)).json()).toMatchObject({
       connectors: ['rcon'],
       game: 'minecraft-java',
-      capabilities: ['commands.send'],
+      capabilities: ['commands.send', 'chat.tell', 'players.whenOnline'],
     });
 
     // Saving without a password keeps the stored one.

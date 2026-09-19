@@ -1,4 +1,5 @@
 import about from '@outpost/plugin-about/server';
+import competitionsPlugin from '@outpost/plugin-competitions/server';
 import consolePlugin from '@outpost/plugin-console/server';
 import playerDetailsPlugin from '@outpost/plugin-player-details/server';
 import playersPlugin from '@outpost/plugin-players/server';
@@ -12,4 +13,5 @@ export const builtInPlugins: readonly PluginDefinition[] = [
   playersPlugin,
   playerDetailsPlugin,
   schedulerPlugin,
+  competitionsPlugin,
 ];

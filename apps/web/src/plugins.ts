@@ -1,4 +1,5 @@
 import about from '@outpost/plugin-about/web';
+import competitionsPlugin from '@outpost/plugin-competitions/web';
 import consolePlugin from '@outpost/plugin-console/web';
 import playerDetailsPlugin from '@outpost/plugin-player-details/web';
 import playersPlugin from '@outpost/plugin-players/web';
@@ -13,6 +14,7 @@ export const builtInWebPlugins: readonly WebPluginDefinition[] = [
   playersPlugin,
   playerDetailsPlugin,
   schedulerPlugin,
+  competitionsPlugin,
 ];
 
 export interface EnabledPlugins {

@@ -14,7 +14,13 @@ import {
   type ServerRouteRequest,
   type ServerRouteSchema,
 } from '@outpost/plugin-api';
-import { API_PREFIX, gameDefaults, pluginApiPath, type ApiErrorBody } from '@outpost/shared';
+import {
+  API_PREFIX,
+  Capability,
+  gameDefaults,
+  pluginApiPath,
+  type ApiErrorBody,
+} from '@outpost/shared';
 import Fastify, {
   type FastifyError,
   type FastifyInstance,
@@ -40,10 +46,13 @@ import type { Config } from './config.js';
 import { createDatabase } from './db/connection.js';
 import { CORE_SCOPE, coreMigrations } from './db/core-migrations.js';
 import { runMigrations } from './db/migrator.js';
+import { createChat } from './chat/service.js';
 import { createEventBus } from './events.js';
 import { FileAccess } from './files/access.js';
 import { SftpSessions } from './files/sftp.js';
+import { GameEventHub } from './game-events/hub.js';
 import { LogHub } from './logs/hub.js';
+import { PlayerTaskQueue } from './player-tasks/queue.js';
 import { registerSecurity } from './http/security.js';
 import { isClientRoute, registerWebUi } from './http/web-ui.js';
 import { PluginHost, resolvePlugins } from './plugins/host.js';
@@ -60,6 +69,7 @@ import { registerServerRoutes } from './routes/servers.js';
 import { registerSystemRoutes } from './routes/system.js';
 import { registerUserRoutes } from './routes/users.js';
 import { ServerService } from './servers/service.js';
+import { createStatistics } from './stats/service.js';
 
 /** How often old audit log entries are deleted. */
 const AUDIT_PRUNE_INTERVAL_MS = 6 * 60 * 60_000;
@@ -100,10 +110,14 @@ export async function buildApp(
   let pruneTimer: NodeJS.Timeout | undefined;
   let connections: ConnectionManager | undefined;
   let logs: LogHub | undefined;
+  let gameEventHub: GameEventHub | undefined;
+  let taskQueue: PlayerTaskQueue | undefined;
   const sftpSessions = new SftpSessions();
   app.addHook('onClose', async () => {
     clearInterval(pruneTimer);
     connections?.closeAll();
+    taskQueue?.stop();
+    gameEventHub?.close();
     logs?.closeAll();
     sftpSessions.closeAll();
     await host?.stop();
@@ -178,6 +192,27 @@ export async function buildApp(
       onError: (serverId, err) => app.log.debug({ err, serverId }, 'reading the log failed'),
     });
     logs = logHub;
+    const capabilitiesOf = async (serverId: string) => {
+      const server = await servers.find(serverId);
+      return new Set(server === undefined ? [] : servers.capabilities(server));
+    };
+    const hasCapability = (capability: string) => async (serverId: string) =>
+      (await capabilitiesOf(serverId)).has(capability);
+    const gameEvents = new GameEventHub(
+      {
+        subscribe: (serverId, listener) => logHub.subscribe(serverId, listener),
+        onReset: (listener) => logHub.onReset(listener),
+      },
+      hasCapability(Capability.gameEvents),
+    );
+    gameEventHub = gameEvents;
+    const playerTasks = new PlayerTaskQueue({
+      db,
+      send: (serverId, command) => connectionManager.send(serverId, command),
+      canTell: hasCapability(Capability.playersWhenOnline),
+      onError: (err, context) => app.log.warn({ err, ...context }, 'a player task failed'),
+    });
+    taskQueue = playerTasks;
     const events = createEventBus(app.log);
     const plugins = new PluginHost(
       resolvePlugins(options.plugins ?? builtInPlugins, config.plugins),
@@ -205,6 +240,17 @@ export async function buildApp(
           recent: (serverId) => logHub.recent(serverId),
           subscribe: (serverId, listener) => logHub.subscribe(serverId, listener),
         },
+        gameEvents,
+        chat: createChat(
+          (serverId, command) => connectionManager.send(serverId, command),
+          hasCapability(Capability.chatTell),
+        ),
+        stats: createStatistics(
+          (serverId, action) => fileAccess.run(serverId, false, action),
+          (serverId, command) => connectionManager.send(serverId, command),
+          hasCapability(Capability.commandsSend),
+        ),
+        playerTasks: (pluginId, inSetup) => playerTasks.forPlugin(pluginId, inSetup),
         hasPermission: async (userId, serverId, permission) => {
           const user = await findUserById(db, userId);
           if (user === undefined || user.disabled_at !== null) return false;
@@ -245,6 +291,7 @@ export async function buildApp(
     if (config.webDir) await registerWebUi(app, config.webDir);
 
     app.addHook('onReady', async () => {
+      playerTasks.start();
       await audit.prune(config.auditRetentionDays);
       pruneTimer = setInterval(() => {
         void audit.prune(config.auditRetentionDays);

@@ -6,6 +6,7 @@ import {
   type PluginLogger,
   type RouteAccess,
   type RouteDefinition,
+  type OutpostServices,
   type RouteSchema,
   type ServerEventStreamDefinition,
   type ServerRouteDefinition,
@@ -118,6 +119,11 @@ export interface PluginHostOptions {
   commands: PluginContext['commands'];
   files: PluginContext['files'];
   logs: PluginContext['logs'];
+  gameEvents: PluginContext['gameEvents'];
+  chat: PluginContext['chat'];
+  stats: PluginContext['stats'];
+  /** The tasks of a plugin; `inSetup` tells whether the plugin is still in its `setup`. */
+  playerTasks(pluginId: string, inSetup: () => boolean): PluginContext['playerTasks'];
   hasPermission: PluginContext['permissions']['has'];
   /** Mounts a plugin route on the HTTP server. */
   registerRoute(pluginId: string, route: RouteDefinition<RouteSchema, RouteAccess>): void;
@@ -144,6 +150,7 @@ export class PluginHost {
   readonly #plugins: readonly PluginDefinition[];
   readonly #options: PluginHostOptions;
   #cleanups: { pluginId: string; callback: () => void | Promise<void> }[] = [];
+  readonly #services = new Map<string, unknown>();
   #started = false;
 
   constructor(plugins: readonly PluginDefinition[], options: PluginHostOptions) {
@@ -224,6 +231,22 @@ export class PluginHost {
         commands: this.#options.commands,
         files: scopedFiles(plugin.id, plugin.files, this.#options.files),
         logs: this.#options.logs,
+        gameEvents: this.#options.gameEvents,
+        chat: this.#options.chat,
+        stats: this.#options.stats,
+        playerTasks: this.#options.playerTasks(plugin.id, () => inSetup),
+        services: {
+          provide: (name, service) => {
+            if (!inSetup) {
+              throw new Error(`Plugin "${plugin.id}" can provide services only during setup`);
+            }
+            if (this.#services.has(name)) {
+              throw new Error(`Plugin "${plugin.id}" provides the service "${name}" twice`);
+            }
+            this.#services.set(name, service);
+          },
+          get: (name) => this.#services.get(name) as OutpostServices[typeof name] | undefined,
+        },
         permissions: { has: this.#options.hasPermission },
         secrets: {
           seal: (plaintext) => secrets.seal(plaintext),

@@ -35,6 +35,7 @@ import {
   type ServerMode,
   type Whitelist,
 } from '../shared.js';
+import '../service.js';
 import { migrations, type PlayersTables } from './tables.js';
 import { PlayerTracker } from './tracker.js';
 import {
@@ -93,6 +94,32 @@ type Access = ReturnType<typeof accessOf>;
 function setup(ctx: PluginContext, pollIntervalMs: number): void {
   const db = ctx.db<PlayersTables>();
   const tracker = new PlayerTracker(ctx, db);
+  ctx.services.provide('outpost.players', {
+    online: async (serverId) =>
+      (
+        await db
+          .selectFrom('mc_player_sessions as session')
+          .innerJoin('mc_players as player', (join) =>
+            join
+              .onRef('player.server_id', '=', 'session.server_id')
+              .onRef('player.uuid', '=', 'session.uuid'),
+          )
+          .select(['player.uuid', 'player.name'])
+          .where('session.server_id', '=', serverId)
+          .where('session.left_at', 'is', null)
+          .orderBy('player.name')
+          .execute()
+      ).map(({ uuid, name }) => ({ uuid, name })),
+    known: async (serverId) =>
+      (
+        await db
+          .selectFrom('mc_players')
+          .select(['uuid', 'name'])
+          .where('server_id', '=', serverId)
+          .orderBy('name')
+          .execute()
+      ).map(({ uuid, name }) => ({ uuid, name })),
+  });
   const whitelistEdits = new PerServerQueue();
   const capability = 'commands.send';
   const send = (serverId: string, command: string) => ctx.commands.send(serverId, command);

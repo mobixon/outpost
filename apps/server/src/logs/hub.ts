@@ -46,6 +46,7 @@ interface ServerLog {
  */
 export class LogHub {
   readonly #logs = new Map<string, Promise<ServerLog>>();
+  readonly #resetListeners = new Set<(serverId: string) => void>();
   readonly #keep: number;
   readonly #tailBytes: number;
   readonly #idleMs: number;
@@ -73,7 +74,10 @@ export class LogHub {
     };
   }
 
-  /** Stops following the log of a server, e.g. after its connector changed. */
+  /**
+   * Stops following the log of a server, e.g. after its connector changed. The listeners of the
+   * log are dropped; `onReset` tells those who want to listen again.
+   */
   reset(serverId: string): void {
     const log = this.#logs.get(serverId);
     this.#logs.delete(serverId);
@@ -81,9 +85,19 @@ export class LogHub {
       (entry) => this.#close(entry),
       () => undefined,
     );
+    for (const listener of this.#resetListeners) listener(serverId);
+  }
+
+  /** Calls `listener` whenever the log of a server is reset; returns a function that stops. */
+  onReset(listener: (serverId: string) => void): () => void {
+    this.#resetListeners.add(listener);
+    return () => {
+      this.#resetListeners.delete(listener);
+    };
   }
 
   closeAll(): void {
+    this.#resetListeners.clear();
     for (const serverId of [...this.#logs.keys()]) this.reset(serverId);
   }
 

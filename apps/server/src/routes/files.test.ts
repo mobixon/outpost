@@ -140,7 +140,7 @@ describe('the Files connector', () => {
     );
     expect(await summary()).toMatchObject({
       connectors: ['files'],
-      capabilities: ['files.read', 'logs.stream'],
+      capabilities: ['files.read', 'logs.stream', 'game.events', 'stats.read'],
     });
     expect((await get(server, url, admin)).json()).toEqual({
       root,
@@ -161,7 +161,7 @@ describe('the Files connector', () => {
     );
     expect(await summary()).toMatchObject({
       connectors: ['files'],
-      capabilities: ['files.read', 'files.write', 'logs.stream'],
+      capabilities: ['files.read', 'files.write', 'logs.stream', 'game.events', 'stats.read'],
     });
     expect((await probe('POST', '/write')).json()).toEqual({ written: true });
     expect(await readFile(path.join(root, 'survival', 'hello.txt'), 'utf8')).toBe('hi');
