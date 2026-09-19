@@ -27,7 +27,8 @@ two-factor login and an audit log.
   account; players online, history, bans, kicks and operators, aware of offline-mode servers; a
   whitelist that gets the UUIDs right, with a doctor for broken entries; the inventories, ender
   chests, statistics and advancements of players, read from the world; scheduled commands and
-  rotating chat announcements.
+  rotating chat announcements; timed **events** such as the weekly top three wood cutters, with
+  standings in the chat, notices on joining and rewards.
 - **Live log.** The console shows the server log as the server writes it, coloured by level, and
   picks up where it left off after a lost connection. Viewers never see it, since it holds the
   chat and the IP addresses of the players.

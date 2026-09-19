@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { CircleAlertIcon, EllipsisIcon, InfoIcon, PlusIcon } from '@lucide/vue';
-import { serverPluginApiPath } from '@outpost/shared';
+import { parseMessage, serverPluginApiPath } from '@outpost/shared';
 import {
   Alert,
   AlertDescription,
@@ -33,6 +33,7 @@ import {
   FieldGroup,
   FieldLabel,
   Input,
+  MessagePreview,
   Select,
   SelectContent,
   SelectItem,
@@ -58,7 +59,6 @@ import {
   MAX_TASK_LINES,
   nextRuns,
   normalizeLines,
-  parseMessage,
   runListSchema,
   runSchema,
   RUNS_KEPT,
@@ -477,26 +477,11 @@ onUnmounted(() => clearInterval(timer));
                     })
               }}
             </FieldDescription>
-            <div
+            <MessagePreview
               v-if="editor.form.type === 'announcement' && formLines.length > 0"
-              class="flex flex-col gap-1 rounded-md border border-white/10 bg-neutral-900 px-3 py-2 font-mono text-sm text-white"
-              :aria-label="t('scheduler.form.preview')"
-            >
-              <p v-for="(line, index) in formLines" :key="index" class="break-words">
-                <span
-                  v-for="(part, partIndex) in parseMessage(line)"
-                  :key="partIndex"
-                  :style="{ color: part.color?.hex }"
-                  :class="{
-                    'font-bold': part.bold,
-                    italic: part.italic,
-                    underline: part.underlined,
-                    'line-through': part.strikethrough,
-                  }"
-                  >{{ part.text }}</span
-                >
-              </p>
-            </div>
+              :lines="formLines.map(parseMessage)"
+              :label="t('scheduler.form.preview')"
+            />
             <Alert v-if="stopWarning">
               <CircleAlertIcon />
               <AlertDescription>{{ t('scheduler.form.stopWarning') }}</AlertDescription>

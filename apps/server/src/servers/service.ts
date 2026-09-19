@@ -219,8 +219,15 @@ export class ServerService {
     if (files !== null) capabilities.push(Capability.filesRead);
     if (files?.writable === true) capabilities.push(Capability.filesWrite);
     // The log of the server, for games that write one, comes through its files.
-    if (files !== null && gameDefaults(this.gameOf(server))?.logFile !== undefined) {
-      capabilities.push(Capability.logsStream);
+    const game = gameDefaults(this.gameOf(server));
+    if (files !== null && game?.logFile !== undefined) capabilities.push(Capability.logsStream);
+    // The services on top of the connectors, for games whose players Outpost knows how to serve.
+    if (game?.playerServices === true) {
+      if (files !== null && game.logFile !== undefined) capabilities.push(Capability.gameEvents);
+      if (files !== null) capabilities.push(Capability.statsRead);
+      if (this.connectionOf(server) !== null) {
+        capabilities.push(Capability.chatTell, Capability.playersWhenOnline);
+      }
     }
     return capabilities;
   }

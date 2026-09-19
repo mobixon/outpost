@@ -220,4 +220,38 @@ export const coreMigrations: readonly Migration[] = [
       await sql`update servers set game = 'minecraft-java' where game is null`.execute(db);
     },
   },
+  {
+    // Things to do when a player is online, for plugins (`ctx.playerTasks`).
+    name: '0009_player_tasks',
+    async up(db, { types }) {
+      await db.schema
+        .createTable('player_tasks')
+        .addColumn('id', 'text', (column) => column.primaryKey())
+        .addColumn('plugin_id', 'text', (column) => column.notNull())
+        .addColumn('server_id', 'text', (column) =>
+          column.notNull().references('servers.id').onDelete('cascade'),
+        )
+        .addColumn('player_uuid', 'text', (column) => column.notNull())
+        .addColumn('player_name', 'text', (column) => column.notNull())
+        .addColumn('kind', 'text', (column) => column.notNull())
+        .addColumn('payload', types.json, (column) => column.notNull())
+        .addColumn('status', 'text', (column) => column.notNull())
+        .addColumn('attempts', 'integer', (column) => column.notNull())
+        .addColumn('error', 'text')
+        .addColumn('retry_at', types.timestamp, (column) => column.notNull())
+        .addColumn('created_at', types.timestamp, (column) => column.notNull())
+        .addColumn('updated_at', types.timestamp, (column) => column.notNull())
+        .execute();
+      await db.schema
+        .createIndex('player_tasks_status_idx')
+        .on('player_tasks')
+        .columns(['status', 'server_id'])
+        .execute();
+      await db.schema
+        .createIndex('player_tasks_plugin_idx')
+        .on('player_tasks')
+        .columns(['plugin_id', 'server_id'])
+        .execute();
+    },
+  },
 ];

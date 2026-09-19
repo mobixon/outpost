@@ -16,6 +16,12 @@ export interface GameDefaults {
   dataFile: string;
   /** The log the server writes, relative to its data folder; followed for `logs.stream`. */
   logFile: string;
+  /**
+   * Whether Outpost knows how to read what players do in the log (`game.events`), how to write to
+   * them (`chat.tell`) and how to read their statistics (`stats.read`), and to tell who is online
+   * (`players.whenOnline`).
+   */
+  playerServices: boolean;
 }
 
 const GAME_DEFAULTS: Record<GameId, GameDefaults> = {
@@ -23,6 +29,7 @@ const GAME_DEFAULTS: Record<GameId, GameDefaults> = {
     rconPort: 25575,
     dataFile: 'server.properties',
     logFile: 'logs/latest.log',
+    playerServices: true,
   },
 };
 
@@ -48,6 +55,14 @@ export const Capability = {
   filesWrite: 'files.write',
   /** Follow the log of the server (Files, for games that write a log file). */
   logsStream: 'logs.stream',
+  /** Chat messages, joins and leaves of players, read from the log (needs `logs.stream`). */
+  gameEvents: 'game.events',
+  /** Send messages to a player or to everyone (needs `commands.send`). */
+  chatTell: 'chat.tell',
+  /** Read the statistics of players (needs `files.read`). */
+  statsRead: 'stats.read',
+  /** Do something when a player comes online (needs `commands.send`). */
+  playersWhenOnline: 'players.whenOnline',
 } as const;
 
 export const RCON_DEFAULT_PORT = 25575;

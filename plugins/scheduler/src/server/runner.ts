@@ -1,7 +1,7 @@
 import { HttpError, type Kysely, type PluginContext } from '@outpost/plugin-api';
-import { parsePlayerList, stripFormatting } from '@outpost/shared';
+import { announcementCommand, parsePlayerList, stripFormatting } from '@outpost/shared';
 import { Cron } from 'croner';
-import { announcementCommand, RUNS_KEPT, type Run } from '../shared.js';
+import { RUNS_KEPT, type Run } from '../shared.js';
 import type { RunStatus, RunTrigger, SchedulerTables } from './tables.js';
 
 export type TaskRow = SchedulerTables['sched_tasks'];

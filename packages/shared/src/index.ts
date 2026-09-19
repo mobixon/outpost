@@ -3,8 +3,12 @@ import { z } from 'zod';
 export * from './admin.js';
 export * from './auth.js';
 export * from './connection.js';
+export * from './messages.js';
+export * from './minecraft-files.js';
+export * from './minecraft-log.js';
 export * from './minecraft.js';
 export * from './servers.js';
+export * from './time.js';
 
 /** Base path of the HTTP API. */
 export const API_PREFIX = '/api/v1';

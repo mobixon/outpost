@@ -226,6 +226,9 @@ importers:
       '@outpost/plugin-api':
         specifier: workspace:*
         version: link:../../packages/plugin-api
+      '@outpost/plugin-competitions':
+        specifier: workspace:*
+        version: link:../../plugins/competitions
       '@outpost/plugin-console':
         specifier: workspace:*
         version: link:../../plugins/console
@@ -296,6 +299,9 @@ importers:
       '@outpost/plugin-about':
         specifier: workspace:*
         version: link:../../plugins/about
+      '@outpost/plugin-competitions':
+        specifier: workspace:*
+        version: link:../../plugins/competitions
       '@outpost/plugin-console':
         specifier: workspace:*
         version: link:../../plugins/console
@@ -422,6 +428,40 @@ importers:
       '@outpost/plugin-api':
         specifier: workspace:*
         version: link:../../packages/plugin-api
+      '@outpost/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@outpost/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      '@outpost/web-plugin-api':
+        specifier: workspace:*
+        version: link:../../packages/web-plugin-api
+      zod:
+        specifier: ^4.6.2
+        version: 4.6.2
+    devDependencies:
+      vue:
+        specifier: ^3.5.42
+        version: 3.5.42(typescript@6.0.3)
+      vue-i18n:
+        specifier: ^11.4.10
+        version: 11.4.10(vue@3.5.42(typescript@6.0.3))
+      vue-router:
+        specifier: ^5.3.1
+        version: 5.3.1(@vue/compiler-sfc@3.5.42)(esbuild@0.28.2)(rolldown@1.2.8)(vite@8.3.0(@types/node@24.13.4)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))(vue@3.5.42(typescript@6.0.3))
+
+  plugins/competitions:
+    dependencies:
+      '@lucide/vue':
+        specifier: ^1.45.0
+        version: 1.45.0(vue@3.5.42(typescript@6.0.3))
+      '@outpost/plugin-api':
+        specifier: workspace:*
+        version: link:../../packages/plugin-api
+      '@outpost/plugin-players':
+        specifier: workspace:*
+        version: link:../players
       '@outpost/shared':
         specifier: workspace:*
         version: link:../../packages/shared

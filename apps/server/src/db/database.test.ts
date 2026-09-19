@@ -20,6 +20,7 @@ describe.each(targets)('database ($name)', ({ url }) => {
     // Every core table, children before parents (foreign keys).
     const tables = [
       'test_items',
+      'player_tasks',
       'invitations',
       'server_members',
       'servers',
@@ -56,6 +57,7 @@ describe.each(targets)('database ($name)', ({ url }) => {
       'outpost.core/0006_user_theme',
       'outpost.core/0007_server_files',
       'outpost.core/0008_server_game',
+      'outpost.core/0009_player_tasks',
     ]);
     expect(typeof rows[0]?.applied_at).toBe('number');
   });

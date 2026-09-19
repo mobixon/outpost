@@ -13,6 +13,7 @@ export * from './components/field/index.js';
 export * from './components/input/index.js';
 export * from './components/input-otp/index.js';
 export * from './components/label/index.js';
+export * from './components/message-preview/index.js';
 export * from './components/select/index.js';
 export * from './components/separator/index.js';
 export * from './components/sheet/index.js';
