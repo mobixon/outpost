@@ -20,6 +20,7 @@ describe.each(targets)('database ($name)', ({ url }) => {
     // Every core table, children before parents (foreign keys).
     const tables = [
       'test_items',
+      'player_tasks',
       'invitations',
       'server_members',
       'servers',
