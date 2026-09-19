@@ -130,7 +130,7 @@ export class Triggers {
       const lines = renderTop(toEvent(row), await this.engine.standings(row), now, {
         name: player,
       });
-      for (const line of lines) await this.ctx.chat.tell(serverId, player, line);
+      if (lines.length > 0) await this.ctx.chat.tell(serverId, player, lines);
     }
   }
 
@@ -145,7 +145,7 @@ export class Triggers {
       const lines = renderJoin(toEvent(row), await this.engine.standings(row), now, {
         name: player,
       });
-      for (const line of lines) await this.ctx.chat.tell(serverId, player, line);
+      if (lines.length > 0) await this.ctx.chat.tell(serverId, player, lines);
     }
   }
 }

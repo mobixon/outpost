@@ -1,6 +1,7 @@
 import { HttpError, type Kysely, type PluginContext } from '@outpost/plugin-api';
 import { z } from 'zod';
 import {
+  announcementKey,
   eventConfigSchema,
   standingSchema,
   type CompetitionEvent,
@@ -8,7 +9,7 @@ import {
   type EventState,
   type Standing,
 } from '../shared.js';
-import { renderResults } from '../render.js';
+import { renderAnnouncement, renderResults } from '../render.js';
 import type { PlayerDirectory } from './players.js';
 import { REWARD_KIND, rewardPayloadSchema, type RewardPayload } from './rewards.js';
 import type { Sampler } from './sampler.js';
@@ -19,14 +20,13 @@ export type EventRow = CompetitionsTables['comp_events'];
 export interface EngineOptions {
   /** How often the competitions are looked at: started, counted, finished. */
   tickMs: number;
-  /** The standings of a running competition are counted this often. */
-  countIntervalMs: number;
+  /** Counts standings this often instead of as often as each event says (tests). */
+  countIntervalMs?: number;
 }
 
-export const DEFAULT_ENGINE_OPTIONS: EngineOptions = {
-  tickMs: 15_000,
-  countIntervalMs: 5 * 60_000,
-};
+export const DEFAULT_ENGINE_OPTIONS: EngineOptions = { tickMs: 15_000 };
+/** An announcement that is late by more than this (Outpost was down) is left out. */
+const ANNOUNCE_GRACE_MS = 3 * 60_000;
 /** Rewards of a competition that ended longer ago are not waited for at the door. */
 const REWARD_WATCH_MS = 30 * 24 * 60 * 60_000;
 /** Rows of the baselines are inserted this many at a time. */
@@ -122,6 +122,7 @@ export class CompetitionEngine {
         .execute();
       for (const row of rows) {
         try {
+          await this.#announce(row);
           await this.#advance(row);
         } catch (err) {
           await this.#fail(row, err);
@@ -177,13 +178,56 @@ export class CompetitionEngine {
       if (now >= Number(row.ends_at)) await this.#finish(row);
       else if (
         row.counted_at === null ||
-        now - Number(row.counted_at) >= this.options.countIntervalMs
+        now - Number(row.counted_at) >=
+          (this.options.countIntervalMs ?? configOf(row).countEveryMinutes * 60_000)
       ) {
         await this.count(row);
         if (row.problem !== null) await this.#update(row.id, { problem: null });
       }
     } else if (row.state === 'finishing') {
       await this.#complete(row);
+    }
+  }
+
+  /** Sends the announcements whose moment has come; the ones far too late are dropped. */
+  async #announce(row: EventRow): Promise<void> {
+    if (row.state !== 'scheduled' && row.state !== 'active') return;
+    const { announcements } = configOf(row);
+    if (announcements.length === 0) return;
+    const sent = new Set<string>(
+      row.announced === null ? [] : (JSON.parse(row.announced) as string[]),
+    );
+    const before = sent.size;
+    const now = Date.now();
+    for (const announcement of announcements) {
+      const key = announcementKey(announcement);
+      const moment =
+        Number(announcement.anchor === 'start' ? row.starts_at : row.ends_at) -
+        announcement.minutesBefore * 60_000;
+      if (sent.has(key) || now < moment) continue;
+      if (now - moment <= ANNOUNCE_GRACE_MS) {
+        try {
+          const lines = renderAnnouncement(
+            toEvent(row),
+            announcement.text,
+            await this.standings(row),
+            now,
+          );
+          if (lines.length > 0) await this.ctx.chat.broadcast(row.server_id, lines);
+        } catch (err) {
+          // Not sent yet (the server is not reachable): try again until it is too late.
+          this.ctx.logger.debug('announcing failed', { eventId: row.id, error: String(err) });
+          continue;
+        }
+      }
+      sent.add(key);
+    }
+    if (sent.size !== before) {
+      await this.db
+        .updateTable('comp_events')
+        .set({ announced: JSON.stringify([...sent]) })
+        .where('id', '=', row.id)
+        .execute();
     }
   }
 
@@ -371,9 +415,8 @@ export class CompetitionEngine {
     if (config.messages.announceResults) {
       const event = { ...toEvent({ ...row, state: 'finished' }) };
       try {
-        for (const line of renderResults(event, standings, now)) {
-          await this.ctx.chat.broadcast(row.server_id, line);
-        }
+        const lines = renderResults(event, standings, now);
+        if (lines.length > 0) await this.ctx.chat.broadcast(row.server_id, lines);
       } catch (err) {
         this.ctx.logger.debug('announcing the results failed', { error: String(err) });
       }
@@ -455,6 +498,7 @@ export class CompetitionEngine {
       results: null,
       finished_at: null,
       problem: null,
+      announced: null,
       created_by: userId,
       created_at: now,
       updated_at: now,
@@ -462,6 +506,15 @@ export class CompetitionEngine {
     await this.db.insertInto('comp_events').values(row).execute();
     void this.tick();
     return row;
+  }
+
+  /**
+   * Counts the standings now from fresh files: the server saves the world first, which can make
+   * it hiccup for a moment, so this is for people to ask for, not for the engine to do.
+   */
+  async recount(row: EventRow): Promise<Standing[]> {
+    await this.#flush(row.server_id);
+    return this.count(row, { fresh: true });
   }
 
   /** Whether a competition in this state can be changed, and which part. */

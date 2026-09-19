@@ -236,7 +236,7 @@ connector to count and RCON to talk to the players and to give rewards. The firs
 many blocks each player mines — the weekly top three wood cutters, for example.
 
 - An event has a **period**: it starts and ends at the date and time you pick, in a time zone you
-  choose. The editor offers 2 days, 1 week and 2 weeks as shortcuts; the end can be any moment. An
+  choose. The editor offers 10 minutes, 30 minutes, 2 days, 1 week and 2 weeks as shortcuts; the end can be any moment. An
   event that starts in the past begins at once.
 - **What is counted** is either the blocks mined or the fish caught (the game's own counter of
   fishing catches, which cannot be farmed by placing and breaking blocks). Blocks are picked from
@@ -247,23 +247,31 @@ many blocks each player mines — the weekly top three wood cutters, for example
 - **Who takes part**: the top `N` places count. Operators (from `ops.json`) can be left out with a
   checkbox, and single players can be left out by picking them from the players Outpost knows.
   Of two players with one score the one who reached it first is ahead.
-- The **standings** are counted every five minutes while the event runs, so the page and the chat
-  answer can be a few minutes behind. The server writes the statistics of a player when they leave
-  and at every autosave, which adds a few minutes more. At the end Outpost makes the server save
-  the world (`save-all flush`), counts once more from fresh files and freezes the result.
+- The **standings** are counted every five minutes by default; each event can refresh them every
+  1 to 60 minutes. They are no fresher than the game writes the statistics of a player: when they
+  leave and at every autosave, about every five minutes, so counting more often only reads the files
+  more often. **Count now** on the page of a running event makes the server save the world
+  (`save-all flush`, which can make it hiccup for a moment) and counts from fresh files. At the end
+  Outpost does the same, counts once more and freezes the result.
 - **Players** can type a chat command, `!top` by default, to see the standings, with their own
   place; they answer only to the player who asked. A player who joins is shown a notice about the
   running event (once per 30 minutes at most). At the end the results are announced to everyone.
   All these texts are yours: the description of the event, the answer to the command, the line of
   one place, the notice, the announcement and the message to a winner, with `&` color codes and
   `{placeholders}` (`{event}`, `{description}`, `{metric}`, `{ends_at}`, `{ends_in}`, `{top}`,
-  `{player}`, `{your_place}`, `{your_score}`) and a preview in the editor. Messages are in English
+  `{player}`, `{your_place}`, `{your_score}`, `{command}`) and a preview in the editor. Messages are in English
   unless you write them otherwise.
+- **Announcements** are messages the event sends to everyone by itself, a number of minutes
+  before its start or its end (0 is at that moment), for example "starts in 10 minutes", "starts in
+  1 minute" and "is on". A new event has these three ready to edit. One message per moment; a
+  message that is late by more than a few minutes, because Outpost was not running, is skipped.
+- **Copy** starts a new event from an existing one, from the next minute on, with the same length.
 - **Rewards** are console commands for the winner of each place, such as `give {player} diamond 5`,
   with `{player}`, `{uuid}`, `{place}`, `{score}` and `{event}` filled in. A command runs when the
   winner is online, so a winner who is away gets it on joining. Every command has a status on the
   event page (waiting for the player, given, failed) and can be tried again or given up. A command
-  the server refuses with a syntax error fails at once; the names of players are checked before
+  the server refuses with a syntax error fails at once; **Test** in the editor runs the commands of a
+  place for an online player of your choice, for real, and shows what the server answered; the names of players are checked before
   they go into a command.
 - The chat command and the notices need the log of the server (`game.events`), which Outpost
   follows on servers that have a running event or rewards waiting. It reads the formats of vanilla,
@@ -381,7 +389,7 @@ More services of the platform, each with its capability (see above):
   `{ type: 'left', player }`. The log is read once per server however many modules listen, and
   followed again after its connector changed.
 - `ctx.chat.tell(serverId, player, message)` and `ctx.chat.broadcast(serverId, message)` send a
-  message with `&` colors through `tellraw`, with the JSON built by Outpost: neither the name nor
+  message, or an array of lines that cost the server one command, with `&` colors through `tellraw`, with the JSON built by Outpost: neither the name nor
   the text can change the command. `@outpost/shared` has the helpers behind it (`parseMessage`,
   `tellrawCommand`, `renderTemplate` for `{placeholders}`).
 - `ctx.stats` gives the statistics of the players: `list(serverId)` the players with the time

@@ -34,6 +34,7 @@ import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   formatScore,
+  renderAnnouncement,
   renderJoin,
   renderResults,
   renderReward,
@@ -45,7 +46,13 @@ import {
   candidateListSchema,
   COMPETITIONS_PLUGIN_ID,
   eventSchema,
+  announcementKey,
   isValidTimezone,
+  rewardTestResultSchema,
+  type Announcement,
+  type RewardTestResult,
+  MAX_ANNOUNCEMENT_MINUTES,
+  MAX_ANNOUNCEMENTS,
   MAX_DESCRIPTION_LENGTH,
   METRIC_KINDS,
   MAX_TOP,
@@ -60,10 +67,13 @@ import {
 } from '../shared.js';
 import {
   applyPeriod,
+  cloneForm,
+  COUNT_EVERY_CHOICES,
   changeTimezone,
   emptyForm,
   fromEvent,
   parseBlocks,
+  parseCommands,
   PERIODS,
   problemsOf,
   toInput,
@@ -71,7 +81,11 @@ import {
 import PlayerPicker from './PlayerPicker.vue';
 import { describe } from './util.js';
 
-const props = defineProps<{ event: CompetitionEvent | null }>();
+const props = defineProps<{
+  event: CompetitionEvent | null;
+  /** Start a new event from `event` instead of changing it. */
+  clone?: boolean;
+}>();
 const open = defineModel<boolean>('open', { required: true });
 const emit = defineEmits<{ saved: [] }>();
 
@@ -90,16 +104,24 @@ const state = reactive<{ busy: boolean; error: string | null }>({ busy: false, e
 
 const canRewards = computed(() => server.value.permissions.includes(REWARD_COMMAND_PERMISSION));
 /** What is counted and the start are fixed once the event runs. */
-const running = computed(() => props.event?.state === 'active');
+const editing = computed(() => props.event !== null && props.clone !== true);
+const running = computed(() => editing.value && props.event?.state === 'active');
 const problems = computed(() => problemsOf(form.value));
 const zoneValid = computed(() => isValidTimezone(zoneDraft.value.trim()));
 const valid = computed(() => problems.value.length === 0 && zoneValid.value);
 
 watch(open, async (isOpen) => {
   if (!isOpen) return;
-  form.value = props.event === null ? emptyForm(browserZone) : fromEvent(props.event);
+  form.value =
+    props.event === null
+      ? emptyForm(browserZone)
+      : props.clone === true
+        ? cloneForm(props.event)
+        : fromEvent(props.event);
   zoneDraft.value = form.value.timezone;
   state.error = null;
+  testPlayer.value = '';
+  tests.value = {};
   try {
     candidates.value = (await apiFetch(url('/players'), candidateListSchema)).players;
   } catch {
@@ -135,8 +157,9 @@ async function save(): Promise<void> {
   state.busy = true;
   state.error = null;
   try {
-    if (props.event === null) await apiSend('POST', url('/events'), body, eventSchema);
-    else await apiSend('PUT', url(`/events/${props.event.id}`), body, eventSchema);
+    if (props.event === null || props.clone === true) {
+      await apiSend('POST', url('/events'), body, eventSchema);
+    } else await apiSend('PUT', url(`/events/${props.event.id}`), body, eventSchema);
     open.value = false;
     emit('saved');
   } catch (err) {
@@ -180,6 +203,7 @@ const sample = computed((): RenderableEvent => {
   const value = form.value;
   return {
     name: value.name.trim() || t('competitions.form.name'),
+    startsAt: new Date(Date.now() + 10 * 60_000).toISOString(),
     endsAt: new Date(Date.now() + (3 * 24 + 5) * 3_600_000).toISOString(),
     timezone: isValidTimezone(value.timezone) ? value.timezone : 'UTC',
     metric:
@@ -214,6 +238,83 @@ const previewOf = (key: (typeof TEMPLATES)[number]) =>
         ),
       )
     : previews.value[key].map(parseMessage);
+
+// --- Announcements ---------------------------------------------------------------------------
+
+function addAnnouncement(): void {
+  const taken = new Set(form.value.announcements.map(announcementKey));
+  let minutes = 5;
+  while (taken.has(announcementKey({ anchor: 'start', minutesBefore: minutes }))) minutes++;
+  if (form.value.announcements.length >= MAX_ANNOUNCEMENTS) return;
+  form.value.announcements.push({
+    anchor: 'start',
+    minutesBefore: minutes,
+    text: '&6&l{event}&r &7starts in &f{starts_in}&7!',
+  });
+}
+
+function removeAnnouncement(index: number): void {
+  form.value.announcements.splice(index, 1);
+}
+
+function setAnchor(announcement: Announcement, value: unknown): void {
+  if (value === 'start' || value === 'end') announcement.anchor = value;
+}
+
+function setMinutes(announcement: Announcement, value: string | number): void {
+  const minutes = Math.round(Number(value));
+  announcement.minutesBefore = Number.isFinite(minutes)
+    ? Math.min(Math.max(minutes, 0), MAX_ANNOUNCEMENT_MINUTES)
+    : 0;
+}
+
+const duplicateMoment = (index: number) => {
+  const key = announcementKey(
+    form.value.announcements[index] ?? { anchor: 'start', minutesBefore: 0 },
+  );
+  return form.value.announcements.findIndex((entry) => announcementKey(entry) === key) !== index;
+};
+
+const announcementPreview = (announcement: Announcement) =>
+  renderAnnouncement(sample.value, announcement.text, SAMPLE_STANDINGS, Date.now()).map(
+    parseMessage,
+  );
+
+function setCountEvery(value: unknown): void {
+  const minutes = Number(value);
+  if (COUNT_EVERY_CHOICES.some((choice) => choice === minutes))
+    form.value.countEveryMinutes = minutes;
+}
+
+// --- Trying the commands of a reward ---------------------------------------------------------
+
+const testPlayer = ref('');
+const tests = ref<Record<number, RewardTestResult['results'] | string>>({});
+const testing = ref(false);
+
+async function testReward(place: number): Promise<void> {
+  const commands = parseCommands(form.value.rewards[place - 1] ?? '');
+  if (testing.value || commands.length === 0 || testPlayer.value.trim() === '') return;
+  testing.value = true;
+  try {
+    const { results } = await apiSend(
+      'POST',
+      url('/rewards/test'),
+      {
+        player: testPlayer.value.trim(),
+        eventName: form.value.name.trim() || 'Test',
+        place,
+        commands,
+      },
+      rewardTestResultSchema,
+    );
+    tests.value = { ...tests.value, [place]: results };
+  } catch (err) {
+    tests.value = { ...tests.value, [place]: describeError(err) };
+  } finally {
+    testing.value = false;
+  }
+}
 </script>
 
 <template>
@@ -227,7 +328,15 @@ const previewOf = (key: (typeof TEMPLATES)[number]) =>
   >
     <DialogContent class="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
       <DialogHeader>
-        <DialogTitle>{{ event ? t('competitions.edit') : t('competitions.new') }}</DialogTitle>
+        <DialogTitle>
+          {{
+            clone
+              ? t('competitions.clone')
+              : editing
+                ? t('competitions.edit')
+                : t('competitions.new')
+          }}
+        </DialogTitle>
       </DialogHeader>
       <form class="flex flex-col gap-6" @submit.prevent="save">
         <section class="flex flex-col gap-4">
@@ -279,7 +388,7 @@ const previewOf = (key: (typeof TEMPLATES)[number]) =>
               type="button"
               variant="outline"
               size="sm"
-              @click="applyPeriod(form, period.hours)"
+              @click="applyPeriod(form, period.minutes)"
             >
               {{ t(`competitions.form.periods.${period.key}`) }}
             </Button>
@@ -335,6 +444,25 @@ const previewOf = (key: (typeof TEMPLATES)[number]) =>
             />
             <FieldDescription>{{ t('competitions.form.blocksHint') }}</FieldDescription>
           </Field>
+          <Field>
+            <FieldLabel for="comp-every">{{ t('competitions.form.countEvery') }}</FieldLabel>
+            <Select
+              :model-value="String(form.countEveryMinutes)"
+              @update:model-value="setCountEvery"
+            >
+              <SelectTrigger id="comp-every" class="w-full sm:w-64"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  v-for="minutes in COUNT_EVERY_CHOICES"
+                  :key="minutes"
+                  :value="String(minutes)"
+                >
+                  {{ t('competitions.form.everyMinutes', { count: minutes }) }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <FieldDescription>{{ t('competitions.form.countEveryHint') }}</FieldDescription>
+          </Field>
         </section>
 
         <section class="flex flex-col gap-4">
@@ -373,6 +501,18 @@ const previewOf = (key: (typeof TEMPLATES)[number]) =>
           <p v-if="!canRewards" class="text-muted-foreground text-xs">
             {{ t('competitions.form.rewardsNeedConsole') }}
           </p>
+          <Field v-if="canRewards">
+            <FieldLabel for="comp-test-player">{{ t('competitions.form.testPlayer') }}</FieldLabel>
+            <Input
+              id="comp-test-player"
+              v-model="testPlayer"
+              maxlength="16"
+              autocomplete="off"
+              spellcheck="false"
+              class="sm:w-64"
+            />
+            <FieldDescription>{{ t('competitions.form.testPlayerHint') }}</FieldDescription>
+          </Field>
           <Field v-for="place in form.top" :key="place">
             <FieldLabel :for="`comp-reward-${place}`">
               {{ t('competitions.form.placeN', { place }) }}
@@ -385,6 +525,37 @@ const previewOf = (key: (typeof TEMPLATES)[number]) =>
               spellcheck="false"
               :disabled="!canRewards"
             />
+            <div v-if="canRewards" class="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                :disabled="
+                  testing ||
+                  testPlayer.trim() === '' ||
+                  parseCommands(form.rewards[place - 1] ?? '').length === 0
+                "
+                @click="testReward(place)"
+              >
+                {{ t('competitions.form.testReward') }}
+              </Button>
+            </div>
+            <template v-if="tests[place] !== undefined">
+              <p v-if="typeof tests[place] === 'string'" class="text-destructive text-xs">
+                {{ tests[place] }}
+              </p>
+              <ul v-else class="flex flex-col gap-1 font-mono text-xs">
+                <li v-for="(result, index) in tests[place]" :key="index">
+                  <span :class="result.ok ? 'text-emerald-600' : 'text-destructive'">
+                    {{ result.ok ? '✓' : '✗' }}
+                  </span>
+                  {{ result.command }}
+                  <span v-if="result.reply" class="text-muted-foreground">
+                    → {{ result.reply }}
+                  </span>
+                </li>
+              </ul>
+            </template>
           </Field>
         </section>
 
@@ -447,6 +618,94 @@ const previewOf = (key: (typeof TEMPLATES)[number]) =>
               :label="t('competitions.form.preview')"
             />
           </Field>
+        </section>
+
+        <section class="flex flex-col gap-4">
+          <h3 class="text-sm font-semibold">{{ t('competitions.form.announcements') }}</h3>
+          <p class="text-muted-foreground text-xs">
+            {{
+              t('competitions.form.announcementsHint', {
+                placeholders: placeholderList('announce'),
+              })
+            }}
+          </p>
+          <div
+            v-for="(announcement, index) in form.announcements"
+            :key="index"
+            class="flex flex-col gap-3 rounded-md border p-3"
+          >
+            <FieldGroup class="grid gap-3 sm:grid-cols-[8rem_1fr_auto]">
+              <Field>
+                <FieldLabel :for="`comp-announce-minutes-${index}`">
+                  {{ t('competitions.form.announcementMinutes') }}
+                </FieldLabel>
+                <Input
+                  :id="`comp-announce-minutes-${index}`"
+                  type="number"
+                  min="0"
+                  :max="MAX_ANNOUNCEMENT_MINUTES"
+                  :model-value="String(announcement.minutesBefore)"
+                  :aria-invalid="duplicateMoment(index)"
+                  @update:model-value="(value: string) => setMinutes(announcement, value)"
+                />
+              </Field>
+              <Field>
+                <FieldLabel :for="`comp-announce-anchor-${index}`">
+                  {{ t('competitions.form.announcementAnchor') }}
+                </FieldLabel>
+                <Select
+                  :model-value="announcement.anchor"
+                  @update:model-value="(value: unknown) => setAnchor(announcement, value)"
+                >
+                  <SelectTrigger :id="`comp-announce-anchor-${index}`" class="w-full sm:w-56">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="start">{{
+                      t('competitions.form.anchors.start')
+                    }}</SelectItem>
+                    <SelectItem value="end">{{ t('competitions.form.anchors.end') }}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <div class="flex items-end">
+                <Button type="button" variant="ghost" size="sm" @click="removeAnnouncement(index)">
+                  {{ t('competitions.form.removeAnnouncement') }}
+                </Button>
+              </div>
+            </FieldGroup>
+            <Field>
+              <FieldLabel :for="`comp-announce-text-${index}`">
+                {{ t('competitions.form.announcementText') }}
+              </FieldLabel>
+              <Textarea
+                :id="`comp-announce-text-${index}`"
+                v-model="announcement.text"
+                rows="2"
+                class="font-mono"
+                spellcheck="false"
+              />
+              <FieldDescription v-if="duplicateMoment(index)" class="text-destructive">
+                {{ t('competitions.form.duplicateMoment') }}
+              </FieldDescription>
+            </Field>
+            <MessagePreview
+              v-if="announcementPreview(announcement).length > 0"
+              :lines="announcementPreview(announcement)"
+              :label="t('competitions.form.preview')"
+            />
+          </div>
+          <div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              :disabled="form.announcements.length >= MAX_ANNOUNCEMENTS"
+              @click="addAnnouncement"
+            >
+              {{ t('competitions.form.addAnnouncement') }}
+            </Button>
+          </div>
         </section>
 
         <Alert v-if="state.error" variant="destructive">

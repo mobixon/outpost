@@ -3,6 +3,7 @@ export default {
     tab: 'Events',
     intro:
       'Timed competitions between players: count what they do over a period, show the standings in the game and hand out rewards.',
+    clone: 'Copy event',
     new: 'New event',
     edit: 'Edit event',
     saved: 'The event was saved.',
@@ -30,10 +31,16 @@ export default {
       menu: 'Actions for {name}',
       open: 'Open',
       edit: 'Edit',
+      clone: 'Copy',
       cancel: 'Cancel event',
       delete: 'Delete',
     },
     detail: {
+      countNow: 'Count now',
+      countNowTitle: 'Count the standings now?',
+      countNowText:
+        'The server saves the world first, which can make it hiccup for a moment. Use it when the exact number matters.',
+      countNowConfirm: 'Count now',
       standings: 'Standings',
       empty: 'Nobody has scored yet.',
       place: 'Place',
@@ -78,6 +85,7 @@ export default {
       error: 'Something went wrong while counting; Outpost will try again.',
     },
     errors: {
+      event_not_running: 'Only a running event can be counted now.',
       invalid_period: 'The event must end in the future.',
       event_over: 'An event that is over cannot be changed.',
       event_running:
@@ -88,13 +96,37 @@ export default {
       capability_missing: 'Connect the Files connector of this server first.',
     },
     form: {
+      countEvery: 'Refresh the standings every',
+      everyMinutes: '{count} min',
+      countEveryHint:
+        'The standings are no fresher than the game writes the statistics: when a player leaves and at every autosave, about every 5 minutes. Counting more often only reads the files more often; use Count now on the event page for an exact number.',
+      announcements: 'Announcements',
+      announcementsHint:
+        'Messages the event sends to everyone by itself. Placeholders: {placeholders}. A message that is late by more than a few minutes, because Outpost was not running, is skipped.',
+      announcementMinutes: 'Minutes before',
+      announcementAnchor: 'Before',
+      anchors: { start: 'the start', end: 'the end' },
+      announcementText: 'Message',
+      addAnnouncement: 'Add a message',
+      removeAnnouncement: 'Remove',
+      duplicateMoment: 'Two messages cannot go out at the same moment.',
+      testReward: 'Test',
+      testPlayer: 'Test rewards on player',
+      testPlayerHint:
+        'A player who is online. Test runs the commands of the place for real, with the name of this player filled in.',
       basics: 'Basics',
       name: 'Name',
       timezone: 'Time zone',
       start: 'Starts',
       end: 'Ends',
       period: 'Length',
-      periods: { twoDays: '2 days', week: '1 week', twoWeeks: '2 weeks' },
+      periods: {
+        tenMinutes: '10 min',
+        thirtyMinutes: '30 min',
+        twoDays: '2 days',
+        week: '1 week',
+        twoWeeks: '2 weeks',
+      },
       periodHint: 'The end can be any date and time. A start in the past begins the event at once.',
       lockedRunning: 'What is counted and the start cannot change once the event has started.',
       metric: 'What is counted',

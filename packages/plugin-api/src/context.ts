@@ -101,9 +101,13 @@ export interface PluginContext {
    * too long. `&` codes color and style the text (`&6` gold, `&c` red, `&l` bold, `&r` reset).
    */
   readonly chat: {
-    tell(serverId: string, player: string, message: string): Promise<void>;
+    /**
+     * `message` is a line, or an array of lines that are shown together and cost the server as few
+     * commands as fit (usually one); line breaks inside a line become spaces.
+     */
+    tell(serverId: string, player: string, message: string | readonly string[]): Promise<void>;
     /** Shows the message to everyone online. */
-    broadcast(serverId: string, message: string): Promise<void>;
+    broadcast(serverId: string, message: string | readonly string[]): Promise<void>;
   };
   /** The statistics of the players. Needs the capability `stats.read` (the Files connector). */
   readonly stats: PlayerStatistics;

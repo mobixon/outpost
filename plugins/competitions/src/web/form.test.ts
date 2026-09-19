@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { eventInputSchema } from '../shared.js';
+import { eventInputSchema, type CompetitionEvent } from '../shared.js';
 import {
   applyPeriod,
   changeTimezone,
+  cloneForm,
   emptyForm,
   parseBlocks,
   parseCommands,
@@ -38,7 +39,7 @@ describe('the competition form', () => {
 
   it('applies periods and keeps the moments when the time zone changes', () => {
     const form = emptyForm('UTC', NOW);
-    applyPeriod(form, 48);
+    applyPeriod(form, 48 * 60);
     expect(form.end).toBe('2026-09-21T10:01');
     changeTimezone(form, 'Europe/Moscow');
     expect(form.start).toBe('2026-09-19T13:01');
@@ -55,6 +56,42 @@ describe('the competition form', () => {
     expect(problemsOf(form)).toEqual([]);
     form.end = form.start;
     expect(problemsOf(form)).toEqual(['period']);
+  });
+
+  it('offers short periods and copies an event to start again', () => {
+    const form = emptyForm('UTC', NOW);
+    applyPeriod(form, 10);
+    expect(form.end).toBe('2026-09-19T10:11');
+    const copy = cloneForm(
+      {
+        ...eventInputSchema.parse(toInput({ ...form, name: 'Ice Rush' })),
+        id: 'e1',
+        state: 'finished',
+        baselineAt: null,
+        finishedAt: null,
+        problem: null,
+        createdAt: '2026-09-19T09:00:00.000Z',
+        updatedAt: '2026-09-19T09:00:00.000Z',
+        rewards: { places: [] },
+      } as unknown as CompetitionEvent,
+      Date.parse('2026-09-21T15:00:30Z'),
+    );
+    expect(copy.name).toBe('Ice Rush (copy)');
+    expect(copy.start).toBe('2026-09-21T15:01');
+    expect(copy.end).toBe('2026-09-21T15:11');
+    expect(copy.announcements).toHaveLength(3);
+  });
+
+  it('keeps the announcements and the counting interval in the request', () => {
+    const form = emptyForm('UTC', NOW);
+    form.name = 'x';
+    form.countEveryMinutes = 1;
+    form.announcements = [{ anchor: 'end', minutesBefore: 2, text: ' &cLast minutes! ' }];
+    expect(toInput(form)).toMatchObject({
+      countEveryMinutes: 1,
+      announcements: [{ anchor: 'end', minutesBefore: 2, text: '&cLast minutes!' }],
+    });
+    expect(eventInputSchema.safeParse(toInput(form)).success).toBe(true);
   });
 
   it('counts fish without asking for blocks, and keeps the blocks when switching back', () => {

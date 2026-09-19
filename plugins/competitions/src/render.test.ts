@@ -3,6 +3,7 @@ import {
   formatDuration,
   formatInstant,
   metricLabel,
+  renderAnnouncement,
   renderJoin,
   renderReward,
   renderTop,
@@ -14,6 +15,7 @@ import { defaultMessages, type Standing } from './shared.js';
 const NOW = Date.parse('2026-09-19T10:00:00Z');
 const event: RenderableEvent = {
   name: 'Wood week',
+  startsAt: '2026-09-19T12:00:00Z',
   endsAt: '2026-09-22T15:00:00Z',
   timezone: 'Europe/Moscow',
   metric: { kind: 'mined', presets: ['wood'], blocks: ['minecraft:cherry_log'] },
@@ -68,6 +70,18 @@ describe('rendering', () => {
     expect(lines).toContain('&7Nobody has scored yet.');
     expect(lines).toHaveLength(3);
     expect(toLines('a\n\n  \nb\n')).toEqual(['a', 'b']);
+  });
+
+  it('fills in an announcement with the time to the start and the command', () => {
+    const lines = renderAnnouncement(
+      event,
+      '&6{event} starts in {starts_in} ({starts_at}), ends in {ends_in}. {command} {description}',
+      standings,
+      NOW,
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('starts in 2h (');
+    expect(lines[0]).toContain('ends in 3d 5h. !top &7Cut the most trees!');
   });
 
   it('tells a winner about the reward', () => {

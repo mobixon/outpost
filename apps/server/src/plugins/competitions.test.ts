@@ -206,6 +206,11 @@ describe('competitions', () => {
       { timeout: 15_000, interval: 50 },
     );
     const answer = rcon.commands.filter((command) => command.startsWith('tellraw Alex')).join('\n');
+    // Every answer is one command, not one per line.
+    for (const command of rcon.commands.filter((entry) => entry.startsWith('tellraw Alex'))) {
+      expect(command).toContain('1. Steve - 15');
+      expect(command).toContain('#2 4');
+    }
     expect(answer).toContain('1. Steve - 15');
     expect(answer).toContain('#2 4');
     expect(answer).toContain('Cut the most trees!');
@@ -341,6 +346,90 @@ describe('competitions', () => {
     });
     expect((await get(server, `${url}/events/${id}`, owner.cookie)).statusCode).toBe(404);
   });
+
+  it('announce by themselves, count on request and test the commands of rewards', async () => {
+    const { server, owner, viewer, url } = await setUp();
+    const created = await send(server, 'POST', `${url}/events`, {
+      cookie: owner.cookie,
+      body: definition({
+        endsAt: new Date(Date.now() + 60_000).toISOString(),
+        announcements: [
+          { anchor: 'start', minutesBefore: 0, text: '&6{event} is on! Type {command}' },
+          { anchor: 'start', minutesBefore: 10, text: 'too early to be sent' },
+        ],
+      }),
+    });
+    expect(created.statusCode).toBe(200);
+    const id = created.json<{ id: string }>().id;
+    const detail = async () =>
+      (await get(server, `${url}/events/${id}`, owner.cookie)).json<Detail>();
+    await vi.waitFor(async () => expect((await detail()).countedAt).not.toBeNull(), {
+      timeout: 5000,
+      interval: 100,
+    });
+
+    // The message of the start goes out once; the one for ten minutes before is already late.
+    await vi.waitFor(
+      () =>
+        expect(
+          rcon.commands.filter(
+            (command) => command.startsWith('tellraw @a') && command.includes('Wood week is on!'),
+          ),
+        ).toHaveLength(1),
+      { timeout: 5000, interval: 100 },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    const announced = rcon.commands.filter((command) => command.startsWith('tellraw @a'));
+    expect(announced).toHaveLength(1);
+    expect(announced[0]).toContain('Type !top');
+
+    // Counting on request saves the world first, and only running events can be counted.
+    const flushes = rcon.commands.filter((command) => command === 'save-all flush').length;
+    await writeStats(STEVE, { 'minecraft:oak_log': 12 });
+    const counted = await send(server, 'POST', `${url}/events/${id}/count`, {
+      cookie: owner.cookie,
+    });
+    expect(counted.statusCode).toBe(200);
+    expect(counted.json<Detail>().standings.map(({ name, score }) => [name, score])).toEqual([
+      ['Steve', 2],
+    ]);
+    expect(rcon.commands.filter((command) => command === 'save-all flush').length).toBe(
+      flushes + 1,
+    );
+    expect(
+      (await send(server, 'POST', `${url}/events/${id}/count`, { cookie: viewer.cookie }))
+        .statusCode,
+    ).toBe(403);
+    await send(server, 'POST', `${url}/events/${id}/cancel`, { cookie: owner.cookie });
+    expect(
+      (await send(server, 'POST', `${url}/events/${id}/count`, { cookie: owner.cookie })).json(),
+    ).toMatchObject({ error: { code: 'event_not_running' } });
+
+    // The commands of a reward can be tried on a player.
+    const tested = await send(server, 'POST', `${url}/rewards/test`, {
+      cookie: owner.cookie,
+      body: {
+        player: 'Steve',
+        eventName: 'Wood week',
+        place: 1,
+        commands: ['give {player} diamond 5'],
+      },
+    });
+    expect(tested.json()).toEqual({
+      results: [{ command: 'give Steve diamond 5', reply: '', ok: true }],
+    });
+    expect(rcon.commands).toContain('give Steve diamond 5');
+    const denied = await send(server, 'POST', `${url}/rewards/test`, {
+      cookie: viewer.cookie,
+      body: { player: 'Steve', eventName: 'x', place: 1, commands: ['say hi'] },
+    });
+    expect(denied.statusCode).toBe(403);
+    const badName = await send(server, 'POST', `${url}/rewards/test`, {
+      cookie: owner.cookie,
+      body: { player: 'Steve; op Steve', eventName: 'x', place: 1, commands: ['say hi'] },
+    });
+    expect(badName.statusCode).toBe(400);
+  }, 30_000);
 
   it('list the players to pick from, with the operators marked', async () => {
     const { server, owner, viewer, url } = await setUp();
