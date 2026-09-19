@@ -30,7 +30,7 @@ import {
   type EventDetail,
   type RewardStatus,
 } from '../shared.js';
-import { describe, formatSpan, formatTime } from './util.js';
+import { describe, formatSpan, formatTime, metricText } from './util.js';
 
 const REFRESH_MS = 15_000;
 /** A start later than this after the planned one is worth a warning. */
@@ -84,15 +84,7 @@ const description = computed(() =>
     .map((part) => part.text)
     .join(''),
 );
-const metricText = computed(() => {
-  const metric = event.value?.metric;
-  if (metric === undefined) return '';
-  const parts = metric.presets.map((preset) => t(`competitions.metric.presets.${preset}`));
-  if (metric.blocks.length > 0) {
-    parts.push(t('competitions.metric.other', { count: metric.blocks.length }));
-  }
-  return `${t('competitions.metric.mined')}: ${parts.join(', ')}`;
-});
+const metricLabel = computed(() => (event.value === null ? '' : metricText(event.value.metric, t)));
 const lateStart = computed(() => {
   const value = event.value;
   if (value?.baselineAt == null) return null;
@@ -173,7 +165,7 @@ defineExpose({ reload: load });
               }}
               · {{ event.timezone }}
             </span>
-            <span>{{ metricText }}</span>
+            <span>{{ metricLabel }}</span>
           </CardDescription>
         </CardHeader>
         <CardContent class="text-muted-foreground flex flex-col gap-1 text-sm">

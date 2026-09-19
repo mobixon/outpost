@@ -238,7 +238,9 @@ many blocks each player mines — the weekly top three wood cutters, for example
 - An event has a **period**: it starts and ends at the date and time you pick, in a time zone you
   choose. The editor offers 2 days, 1 week and 2 weeks as shortcuts; the end can be any moment. An
   event that starts in the past begins at once.
-- **What is counted** is picked from groups of blocks (wood, stone, ores, earth) and any block ids
+- **What is counted** is either the blocks mined or the fish caught (the game's own counter of
+  fishing catches, which cannot be farmed by placing and breaking blocks). Blocks are picked from
+  groups of blocks (wood, stone, ores, earth) and any block ids
   of your own, where `*` stands for any part of a name (`minecraft:cherry_log`, `*_log`). The score
   of a player is what their counter grew by from the start to the end: mining at the start and at
   the end is read from the statistics of the world, so no plugin or mod is needed.
@@ -275,8 +277,9 @@ many blocks each player mines — the weekly top three wood cutters, for example
   commands, so setting them needs the right to run console commands (`console.execute`) besides
   managing events. Creating, changing, cancelling and deleting events and rewards are written to the
   audit log.
-- Counts are of what the game writes as `mined`: breaking a block counts, whatever it is broken
-  with, and so does a block that was placed and broken again. Outpost cannot tell these apart.
+- Blocks are counted as the game writes them as `mined`: breaking a block counts, whatever it is
+  broken with, and so does a block that was placed and broken again (with silk touch, for
+  example). Outpost cannot tell these apart; the fish caught do not have this problem.
 
 ## Roles
 

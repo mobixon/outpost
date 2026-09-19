@@ -54,6 +54,12 @@ describe('the event input', () => {
     expect(problems(input())).toEqual([]);
   });
 
+  it('counts blocks or fish, and fish need nothing more', () => {
+    expect(problems({ ...input(), metric: { kind: 'fish_caught' } })).toEqual([]);
+    expect(problems({ ...input(), metric: { kind: 'fish_caught', presets: [] } })).toEqual([]);
+    expect(problems({ ...input(), metric: { kind: 'sheep' } })).toEqual(['metric.kind']);
+  });
+
   it('needs an end after the start, and not more than a year', () => {
     expect(problems({ ...input(), endsAt: '2026-09-20T10:00:00Z' })).toEqual(['endsAt']);
     expect(problems({ ...input(), endsAt: '2028-01-01T00:00:00Z' })).toEqual(['endsAt']);

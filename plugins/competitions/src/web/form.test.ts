@@ -57,6 +57,19 @@ describe('the competition form', () => {
     expect(problemsOf(form)).toEqual(['period']);
   });
 
+  it('counts fish without asking for blocks, and keeps the blocks when switching back', () => {
+    const form = emptyForm('UTC', NOW);
+    form.name = 'Fishing week';
+    form.presets = [];
+    form.metric = 'fish_caught';
+    expect(problemsOf(form)).toEqual([]);
+    const input = toInput(form);
+    expect(input?.metric).toEqual({ kind: 'fish_caught' });
+    expect(eventInputSchema.safeParse(input).success).toBe(true);
+    form.metric = 'mined';
+    expect(problemsOf(form)).toEqual(['metric']);
+  });
+
   it('reads blocks and commands from text', () => {
     expect(parseBlocks('cherry_log, minecraft:OAK_LOG\n*_ore;cherry_log')).toEqual([
       'minecraft:cherry_log',

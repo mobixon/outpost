@@ -1,4 +1,5 @@
 import { ApiError } from '@outpost/web-plugin-api';
+import type { Metric } from '../shared.js';
 
 type Translate = (key: string, named?: Record<string, unknown>) => string;
 type Exists = (key: string) => boolean;
@@ -30,4 +31,17 @@ export function formatSpan(ms: number): string {
   if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
   if (hours > 0) return rest > 0 ? `${hours}h ${rest}m` : `${hours}h`;
   return `${rest}m`;
+}
+
+/** What a metric counts, in a few words: "Blocks mined: Wood, 1 more blocks" or "Fish caught". */
+export function metricText(
+  metric: Metric,
+  t: (key: string, named?: Record<string, unknown>) => string,
+): string {
+  if (metric.kind === 'fish_caught') return t('competitions.metric.fish_caught');
+  const parts = metric.presets.map((preset) => t(`competitions.metric.presets.${preset}`));
+  if (metric.blocks.length > 0) {
+    parts.push(t('competitions.metric.other', { count: metric.blocks.length }));
+  }
+  return `${t('competitions.metric.mined')}: ${parts.join(', ')}`;
 }

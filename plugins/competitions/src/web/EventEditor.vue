@@ -47,6 +47,7 @@ import {
   eventSchema,
   isValidTimezone,
   MAX_DESCRIPTION_LENGTH,
+  METRIC_KINDS,
   MAX_TOP,
   PLACEHOLDERS,
   REWARD_COMMAND_PERMISSION,
@@ -118,6 +119,10 @@ function togglePreset(preset: BlockPreset): void {
     : [...presets, preset];
 }
 
+function setMetric(value: unknown): void {
+  if (value === 'mined' || value === 'fish_caught') form.value.metric = value;
+}
+
 function setTop(value: unknown): void {
   const top = Number(value);
   if (Number.isInteger(top) && top >= 1 && top <= MAX_TOP) form.value.top = top;
@@ -177,7 +182,10 @@ const sample = computed((): RenderableEvent => {
     name: value.name.trim() || t('competitions.form.name'),
     endsAt: new Date(Date.now() + (3 * 24 + 5) * 3_600_000).toISOString(),
     timezone: isValidTimezone(value.timezone) ? value.timezone : 'UTC',
-    metric: { kind: 'mined', presets: value.presets, blocks: parseBlocks(value.blocks) },
+    metric:
+      value.metric === 'mined'
+        ? { kind: 'mined', presets: value.presets, blocks: parseBlocks(value.blocks) }
+        : { kind: 'fish_caught' },
     messages: value.messages,
     participants: { top: value.top, excludeOperators: value.excludeOperators, excluded: [] },
   };
@@ -284,6 +292,20 @@ const previewOf = (key: (typeof TEMPLATES)[number]) =>
         <section class="flex flex-col gap-4">
           <h3 class="text-sm font-semibold">{{ t('competitions.form.counting') }}</h3>
           <Field>
+            <FieldLabel for="comp-metric">{{ t('competitions.form.metric') }}</FieldLabel>
+            <Select :model-value="form.metric" :disabled="running" @update:model-value="setMetric">
+              <SelectTrigger id="comp-metric" class="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="kind in METRIC_KINDS" :key="kind" :value="kind">
+                  {{ t(`competitions.metric.${kind}`) }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <FieldDescription v-if="form.metric === 'fish_caught'">
+              {{ t('competitions.form.fishHint') }}
+            </FieldDescription>
+          </Field>
+          <Field v-if="form.metric === 'mined'">
             <FieldLabel>{{ t('competitions.form.presets') }}</FieldLabel>
             <div class="flex flex-wrap gap-2">
               <Button
@@ -300,7 +322,7 @@ const previewOf = (key: (typeof TEMPLATES)[number]) =>
               </Button>
             </div>
           </Field>
-          <Field>
+          <Field v-if="form.metric === 'mined'">
             <FieldLabel for="comp-blocks">{{ t('competitions.form.blocks') }}</FieldLabel>
             <Textarea
               id="comp-blocks"

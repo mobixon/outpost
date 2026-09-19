@@ -39,6 +39,7 @@ describe('rendering', () => {
   it('shows moments in the time zone of the competition', () => {
     expect(formatInstant(Date.parse('2026-09-28T15:00:00Z'), 'Europe/Moscow')).toContain('18:00');
     expect(metricLabel(event.metric)).toBe('Mined: wood, 1 other');
+    expect(metricLabel({ kind: 'fish_caught' })).toBe('Fish caught');
   });
 
   it('answers the chat command with the top, the place of the player and the time left', () => {

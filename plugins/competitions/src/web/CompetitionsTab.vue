@@ -36,7 +36,7 @@ import {
 } from '../shared.js';
 import EventDetail from './EventDetail.vue';
 import EventEditor from './EventEditor.vue';
-import { describe, formatTime } from './util.js';
+import { describe, formatTime, metricText } from './util.js';
 
 const REFRESH_MS = 30_000;
 
@@ -119,14 +119,6 @@ const period = (event: CompetitionEvent) =>
     start: formatTime(event.startsAt, locale.value, event.timezone),
     end: formatTime(event.endsAt, locale.value, event.timezone),
   });
-const presetsText = (event: CompetitionEvent) =>
-  [
-    ...event.metric.presets.map((preset) => t(`competitions.metric.presets.${preset}`)),
-    ...(event.metric.blocks.length > 0
-      ? [t('competitions.metric.other', { count: event.metric.blocks.length })]
-      : []),
-  ].join(', ');
-
 let timer: ReturnType<typeof setInterval> | undefined;
 onMounted(() => {
   void load();
@@ -193,7 +185,7 @@ onUnmounted(() => clearInterval(timer));
                 </CardTitle>
                 <CardDescription class="flex flex-col gap-0.5">
                   <span>{{ period(event) }}</span>
-                  <span>{{ t('competitions.metric.mined') }}: {{ presetsText(event) }}</span>
+                  <span>{{ metricText(event.metric, t) }}</span>
                 </CardDescription>
               </button>
               <DropdownMenu v-if="canManage">
