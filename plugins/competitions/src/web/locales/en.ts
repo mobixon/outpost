@@ -3,6 +3,7 @@ export default {
     tab: 'Events',
     intro:
       'Timed competitions between players: count what they do over a period, show the standings in the game and hand out rewards.',
+    jsonCopied: 'The event was copied as JSON.',
     clone: 'Copy event',
     new: 'New event',
     edit: 'Edit event',
@@ -77,10 +78,14 @@ export default {
       open: 'Open',
       edit: 'Edit',
       clone: 'Copy',
+      copyJson: 'Copy as JSON',
       cancel: 'Cancel event',
       delete: 'Delete',
     },
     detail: {
+      copiedJson: 'Copied',
+      copyJsonFailed:
+        'The browser did not allow copying. Open the event in the editor, switch to JSON and copy from there.',
       goalsInfo: 'Goals for everyone',
       progress: 'Progress',
       progressEmpty: 'Nobody has made progress yet.',
@@ -146,6 +151,15 @@ export default {
       capability_missing: 'Connect the Files connector of this server first.',
     },
     form: {
+      viewForm: 'Form',
+      jsonHint:
+        'Paste JSON or edit it. What the JSON leaves out keeps its value from the form, one level down for the texts and the participants, so a small piece changes only what it says. Times are ISO moments such as 2026-09-28T15:00:00Z. Mistakes are shown when you apply it, switch to the form or save.',
+      copyJson: 'Copy JSON',
+      copied: 'Copied',
+      applyJson: 'Apply to the form',
+      jsonIgnored: 'Ignored keys: {keys}',
+      copyFailed:
+        'The browser did not allow copying. Open the event in the editor, switch to JSON and copy from there.',
       mode: 'Kind of event',
       modes: { ranking: 'Top of players', goals: 'Goals for everyone' },
       modeHints: {

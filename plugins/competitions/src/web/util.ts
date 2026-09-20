@@ -1,5 +1,6 @@
 import { ApiError } from '@outpost/web-plugin-api';
-import type { Metric, Scoring } from '../shared.js';
+import type { CompetitionEvent, Metric, Scoring } from '../shared.js';
+import { inputOf } from './form.js';
 
 type Translate = (key: string, named?: Record<string, unknown>) => string;
 type Exists = (key: string) => boolean;
@@ -61,4 +62,14 @@ export function eventText(
     return `${t('competitions.metric.goals')}: ${event.scoring.targets.map((target) => target.label).join(', ')}`;
   }
   return event.metric === undefined ? '' : metricText(event.metric, t);
+}
+
+/** Puts an event on the clipboard as the JSON that makes the same event; false when refused. */
+export async function copyEventJson(event: CompetitionEvent): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(inputOf(event), null, 2));
+    return true;
+  } catch {
+    return false;
+  }
 }

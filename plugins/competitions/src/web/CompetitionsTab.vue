@@ -36,7 +36,7 @@ import {
 } from '../shared.js';
 import EventDetail from './EventDetail.vue';
 import EventEditor from './EventEditor.vue';
-import { describe, eventText, formatTime } from './util.js';
+import { copyEventJson, describe, eventText, formatTime } from './util.js';
 
 const REFRESH_MS = 30_000;
 
@@ -90,6 +90,12 @@ async function act(action: () => Promise<void>): Promise<void> {
   } finally {
     busy.value = false;
   }
+}
+
+async function copyJson(event: CompetitionEvent): Promise<void> {
+  message.value = (await copyEventJson(event))
+    ? { kind: 'info', text: t('competitions.jsonCopied') }
+    : { kind: 'error', text: t('competitions.detail.copyJsonFailed') };
 }
 
 async function cancel(): Promise<void> {
@@ -210,6 +216,9 @@ onUnmounted(() => clearInterval(timer));
                   </DropdownMenuItem>
                   <DropdownMenuItem @select="openEditor(event, true)">
                     {{ t('competitions.actions.clone') }}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem @select="copyJson(event)">
+                    {{ t('competitions.actions.copyJson') }}
                   </DropdownMenuItem>
                   <DropdownMenuItem v-if="editable(event)" @select="cancelling = event">
                     {{ t('competitions.actions.cancel') }}
