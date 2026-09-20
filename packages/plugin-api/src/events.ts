@@ -12,6 +12,8 @@
 export interface OutpostEvents {
   /** Startup finished: all plugins are set up and all routes are registered. */
   'outpost.started': { version: string };
+  /** A module was switched on or off for a server. */
+  'outpost.module.changed': { serverId: string; pluginId: string; enabled: boolean };
   /** Shutdown has begun; plugins are stopped right after the handlers finish. */
   'outpost.stopping': Record<string, never>;
 }

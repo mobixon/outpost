@@ -139,6 +139,8 @@ export class CompetitionEngine {
         .where('state', 'in', ['scheduled', 'active', 'finishing'])
         .execute();
       for (const row of rows) {
+        // Switched off for the server: the event waits as it is, and the server is left alone.
+        if (!this.ctx.servers.enabledFor(row.server_id)) continue;
         try {
           await this.#announce(row);
           await this.#advance(row);
@@ -152,7 +154,11 @@ export class CompetitionEngine {
         .distinct()
         .where('state', '=', 'active')
         .execute();
-      const watched = new Set(active.map(({ server_id }) => server_id));
+      const watched = new Set(
+        active
+          .map(({ server_id }) => server_id)
+          .filter((serverId) => this.ctx.servers.enabledFor(serverId)),
+      );
       const recent = await this.db
         .selectFrom('comp_events')
         .select('server_id')
@@ -161,7 +167,7 @@ export class CompetitionEngine {
         .where('finished_at', '>', Date.now() - REWARD_WATCH_MS)
         .execute();
       for (const { server_id: serverId } of recent) {
-        if (watched.has(serverId)) continue;
+        if (watched.has(serverId) || !this.ctx.servers.enabledFor(serverId)) continue;
         const waiting = await this.ctx.playerTasks.list({
           serverId,
           kind: REWARD_KIND,

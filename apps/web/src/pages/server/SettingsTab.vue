@@ -34,6 +34,7 @@ import { loadServers } from '../../servers.js';
 import { useShell } from '../../shell.js';
 import ConnectionCard from './ConnectionCard.vue';
 import FilesCard from './FilesCard.vue';
+import ModulesCard from './ModulesCard.vue';
 
 const { t, te } = useI18n();
 const isSuperadmin = useShell().session?.user?.isSuperadmin === true;
@@ -88,6 +89,7 @@ const remove = () =>
   <div class="flex flex-col gap-6">
     <ConnectionCard v-if="isSuperadmin" />
     <FilesCard v-if="isSuperadmin" />
+    <ModulesCard v-if="server.permissions.includes('server.manage')" />
     <Card>
       <CardHeader>
         <CardTitle>{{ t('servers.settings.title') }}</CardTitle>

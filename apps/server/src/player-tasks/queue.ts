@@ -42,6 +42,8 @@ export interface PlayerTaskQueueOptions {
   send(serverId: string, command: string): Promise<string>;
   /** Whether the server can tell who is online (`players.whenOnline`). */
   canTell(serverId: string): Promise<boolean>;
+  /** Whether a plugin is on for a server: the tasks of a module that is off wait. */
+  isEnabled?(pluginId: string, serverId: string): boolean;
   onError?(err: unknown, context: Record<string, unknown>): void;
 }
 
@@ -154,14 +156,22 @@ export class PlayerTaskQueue {
     if (this.#sweeping) return;
     this.#sweeping = true;
     try {
-      const due = await this.options.db
+      const pending = await this.options.db
         .selectFrom('player_tasks')
-        .select('server_id')
+        .select(['server_id', 'plugin_id'])
         .distinct()
         .where('status', '=', 'pending')
         .where('retry_at', '<=', Date.now())
         .execute();
-      for (const { server_id: serverId } of due) {
+      // A server is asked who is online only for the tasks of modules that are on for it.
+      const due = [
+        ...new Set(
+          pending
+            .filter((task) => this.#enabled(task.plugin_id, task.server_id))
+            .map((task) => task.server_id),
+        ),
+      ];
+      for (const serverId of due) {
         try {
           if (!(await this.options.canTell(serverId))) continue;
           const list = parsePlayerList(await this.options.send(serverId, 'list'));
@@ -177,6 +187,10 @@ export class PlayerTaskQueue {
     }
   }
 
+  #enabled(pluginId: string, serverId: string): boolean {
+    return this.options.isEnabled?.(pluginId, serverId) ?? true;
+  }
+
   /** Runs the due tasks of the players (lowercase names) who are online on a server. */
   async #runFor(serverId: string, online: ReadonlySet<string>): Promise<void> {
     const rows = await this.options.db
@@ -190,6 +204,7 @@ export class PlayerTaskQueue {
       .execute();
     for (const row of rows) {
       if (!online.has(row.player_name.toLowerCase()) || this.#running.has(row.id)) continue;
+      if (!this.#enabled(row.plugin_id, serverId)) continue;
       const handler = this.#handlers.get(`${row.plugin_id}\n${row.kind}`);
       // The plugin is not enabled: the task waits for it.
       if (handler === undefined) continue;

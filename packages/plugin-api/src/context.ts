@@ -51,8 +51,14 @@ export interface PluginContext {
   readonly servers: {
     get(id: string): Promise<ServerInfo | undefined>;
     list(): Promise<ServerInfo[]>;
-    /** Whether the plugin supports the game of the server (see `games` of the plugin). */
+    /**
+     * Whether the plugin supports the game of the server (see `games` of the plugin) and has not
+     * been switched off for it. Background jobs check this for every server before they touch it:
+     * a module that is off must not ask the server anything.
+     */
     supports(server: ServerInfo): boolean;
+    /** Whether the plugin has not been switched off for the server; false for an unknown server. */
+    enabledFor(serverId: string): boolean;
   };
   readonly commands: {
     /**

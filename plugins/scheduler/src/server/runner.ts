@@ -60,6 +60,8 @@ export class TaskRunner {
     this.unschedule(task.id);
     if (task.enabled !== 1) return;
     const job = new Cron(task.cron, { mode: '5-part', timezone: task.timezone }, () => {
+      // Switched off for the server: nothing runs, and nothing is recorded.
+      if (!this.#ctx.servers.enabledFor(task.server_id)) return;
       this.run(task.id, 'schedule', null).catch((err: unknown) => {
         this.#ctx.logger.error('A scheduled task failed', { taskId: task.id, error: String(err) });
       });

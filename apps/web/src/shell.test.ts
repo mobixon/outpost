@@ -80,6 +80,7 @@ describe('buildServerTabs', () => {
     expect(buildServerTabs([plugin])).toEqual([
       {
         id: 'test.console.console',
+        pluginId: 'test.console',
         key: 'console',
         label: 'console.tab',
         icon: TestIcon,
