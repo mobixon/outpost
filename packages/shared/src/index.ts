@@ -38,6 +38,8 @@ export const pluginInfoSchema = z.object({
   games: z.array(z.string()).nullable(),
   /** The plugin cannot be switched off for a server. */
   essential: z.boolean(),
+  /** Whether the module is on for a server that has not been told otherwise. */
+  defaultEnabled: z.boolean(),
 });
 export type PluginInfo = z.infer<typeof pluginInfoSchema>;
 

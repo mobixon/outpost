@@ -419,7 +419,7 @@ export class ServerService {
   }
 
   /** The modules switched off per server; set once the plugins are known. */
-  modules: { disabledFor(serverId: string): string[] } | undefined;
+  modules: { disabledFor(serverId: string, game: string): string[] } | undefined;
 
   summary({ server, role, permissions }: ServerAccess): ServerSummary {
     return {
@@ -431,7 +431,7 @@ export class ServerService {
       capabilities: this.capabilities(server),
       connectors: this.connectors(server),
       game: this.gameOf(server),
-      disabledModules: this.modules?.disabledFor(server.id) ?? [],
+      disabledModules: this.modules?.disabledFor(server.id, this.gameOf(server)) ?? [],
       createdAt: new Date(server.created_at).toISOString(),
     };
   }

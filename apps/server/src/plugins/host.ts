@@ -143,12 +143,13 @@ export interface PluginHostOptions {
   ): void;
 }
 
-function infoOf({ id, version, games, essential }: PluginDefinition): PluginInfo {
+function infoOf({ id, version, games, essential, defaultEnabled }: PluginDefinition): PluginInfo {
   return {
     id,
     version,
     games: games === undefined ? null : [...games],
     essential: essential === true,
+    defaultEnabled: defaultEnabled !== false,
   };
 }
 

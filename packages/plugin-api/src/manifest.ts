@@ -46,6 +46,12 @@ export interface PluginDefinition extends PluginManifest {
    */
   games?: readonly string[];
   /**
+   * Whether the module is on for a server that has not been told otherwise; `false` makes it
+   * opt-in: an owner switches it on where it is wanted. Servers that exist when Outpost first knows
+   * the module keep it as it was. Defaults to true.
+   */
+  defaultEnabled?: boolean;
+  /**
    * The plugin cannot be switched off for a server: the console and the like, without which a
    * server cannot be managed. Every other module of servers can be.
    */
