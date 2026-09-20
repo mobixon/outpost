@@ -91,7 +91,7 @@ enough to write a plugin.
 Maintainers release by pushing a version tag on `main`:
 
 ```sh
-git tag v0.5.0 && git push origin v0.5.0
+git tag v0.5.2 && git push origin v0.5.2
 ```
 
 The [release workflow](.github/workflows/release.yml) builds and smoke-tests the image, pushes it
