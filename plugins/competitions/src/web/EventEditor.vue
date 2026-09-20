@@ -73,6 +73,7 @@ import {
   changeTimezone,
   emptyForm,
   emptyTarget,
+  formFromJson,
   fromEvent,
   parseCommands,
   PERIODS,
@@ -126,6 +127,9 @@ watch(open, async (isOpen) => {
   zoneDraft.value = form.value.timezone;
   state.error = null;
   testPlayer.value = '';
+  view.value = 'form';
+  jsonErrors.value = [];
+  jsonIgnored.value = [];
   tests.value = {};
   try {
     candidates.value = (await apiFetch(url('/players'), candidateListSchema)).players;
@@ -145,6 +149,7 @@ function setTop(value: unknown): void {
 }
 
 async function save(): Promise<void> {
+  if (view.value === 'json' && !applyJson()) return;
   if (state.busy || !valid.value) return;
   const body = toInput(form.value);
   if (body === null) return;
@@ -291,6 +296,53 @@ function setAmount(target: TargetForm, value: string): void {
   target.amount = Number.isFinite(amount) ? Math.min(Math.max(amount, 0), MAX_TARGET_AMOUNT) : 0;
 }
 
+// --- The JSON view -----------------------------------------------------------------------------
+
+const view = ref<'form' | 'json'>('form');
+const jsonText = ref('');
+const jsonErrors = ref<string[]>([]);
+const jsonIgnored = ref<string[]>([]);
+const copied = ref(false);
+
+function showJson(): void {
+  jsonText.value = JSON.stringify(toInput(form.value) ?? {}, null, 2);
+  jsonErrors.value = [];
+  jsonIgnored.value = [];
+  view.value = 'json';
+}
+
+/** Puts what the JSON says into the form; false, with the reasons, when it does not fit. */
+function applyJson(): boolean {
+  const result = formFromJson(jsonText.value, form.value);
+  if (!result.ok) {
+    jsonErrors.value = result.errors;
+    return false;
+  }
+  form.value = result.form;
+  zoneDraft.value = result.form.timezone;
+  jsonErrors.value = [];
+  jsonIgnored.value = result.ignored;
+  jsonText.value = JSON.stringify(toInput(result.form) ?? {}, null, 2);
+  return true;
+}
+
+function showForm(): void {
+  if (view.value === 'json' && !applyJson()) return;
+  view.value = 'form';
+}
+
+async function copyJson(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(jsonText.value);
+    copied.value = true;
+    setTimeout(() => {
+      copied.value = false;
+    }, 2000);
+  } catch {
+    jsonErrors.value = [t('competitions.form.copyFailed')];
+  }
+}
+
 // --- Announcements ---------------------------------------------------------------------------
 
 function addAnnouncement(): void {
@@ -391,131 +443,451 @@ async function testReward(place: number): Promise<void> {
         </DialogTitle>
       </DialogHeader>
       <form class="flex flex-col gap-6" @submit.prevent="save">
-        <section class="flex flex-col gap-4">
-          <h3 class="text-sm font-semibold">{{ t('competitions.form.basics') }}</h3>
-          <FieldGroup class="grid gap-4 sm:grid-cols-2">
+        <div class="flex flex-wrap items-center gap-2" role="group">
+          <Button
+            type="button"
+            size="sm"
+            :variant="view === 'form' ? 'default' : 'outline'"
+            :aria-pressed="view === 'form'"
+            @click="showForm"
+          >
+            {{ t('competitions.form.viewForm') }}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            :variant="view === 'json' ? 'default' : 'outline'"
+            :aria-pressed="view === 'json'"
+            @click="showJson"
+          >
+            JSON
+          </Button>
+        </div>
+
+        <template v-if="view === 'form'">
+          <section class="flex flex-col gap-4">
+            <h3 class="text-sm font-semibold">{{ t('competitions.form.basics') }}</h3>
+            <FieldGroup class="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel for="comp-name">{{ t('competitions.form.name') }}</FieldLabel>
+                <Input id="comp-name" v-model="form.name" maxlength="80" />
+              </Field>
+              <Field>
+                <FieldLabel for="comp-zone">{{ t('competitions.form.timezone') }}</FieldLabel>
+                <Input
+                  id="comp-zone"
+                  v-model="zoneDraft"
+                  list="competitions-timezones"
+                  autocomplete="off"
+                  spellcheck="false"
+                  :aria-invalid="!zoneValid"
+                  @change="setZone"
+                />
+                <datalist id="competitions-timezones">
+                  <option v-for="zone in timezones" :key="zone" :value="zone" />
+                </datalist>
+              </Field>
+              <Field>
+                <FieldLabel for="comp-start">{{ t('competitions.form.start') }}</FieldLabel>
+                <Input
+                  id="comp-start"
+                  v-model="form.start"
+                  type="datetime-local"
+                  :disabled="running"
+                />
+              </Field>
+              <Field>
+                <FieldLabel for="comp-end">{{ t('competitions.form.end') }}</FieldLabel>
+                <Input
+                  id="comp-end"
+                  v-model="form.end"
+                  type="datetime-local"
+                  :aria-invalid="problems.includes('period')"
+                />
+              </Field>
+            </FieldGroup>
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-muted-foreground text-sm"
+                >{{ t('competitions.form.period') }}:</span
+              >
+              <Button
+                v-for="period in PERIODS"
+                :key="period.key"
+                type="button"
+                variant="outline"
+                size="sm"
+                @click="applyPeriod(form, period.minutes)"
+              >
+                {{ t(`competitions.form.periods.${period.key}`) }}
+              </Button>
+            </div>
+            <p class="text-muted-foreground text-xs">
+              {{
+                running ? t('competitions.form.lockedRunning') : t('competitions.form.periodHint')
+              }}
+            </p>
+          </section>
+
+          <section class="flex flex-col gap-4">
+            <h3 class="text-sm font-semibold">{{ t('competitions.form.counting') }}</h3>
             <Field>
-              <FieldLabel for="comp-name">{{ t('competitions.form.name') }}</FieldLabel>
-              <Input id="comp-name" v-model="form.name" maxlength="80" />
+              <FieldLabel for="comp-mode">{{ t('competitions.form.mode') }}</FieldLabel>
+              <Select :model-value="form.mode" :disabled="running" @update:model-value="setMode">
+                <SelectTrigger id="comp-mode" class="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ranking">{{
+                    t('competitions.form.modes.ranking')
+                  }}</SelectItem>
+                  <SelectItem value="goals">{{ t('competitions.form.modes.goals') }}</SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldDescription>{{
+                t(`competitions.form.modeHints.${form.mode}`)
+              }}</FieldDescription>
             </Field>
+            <MetricPicker
+              v-if="form.mode === 'ranking'"
+              id="comp-metric"
+              v-model="form.metric"
+              :disabled="running"
+            />
+            <template v-else>
+              <div
+                v-for="(target, index) in form.targets"
+                :key="index"
+                class="flex flex-col gap-3 rounded-md border p-3"
+              >
+                <FieldGroup class="grid gap-3 sm:grid-cols-[1fr_8rem_auto]">
+                  <Field>
+                    <FieldLabel :for="`comp-target-label-${index}`">
+                      {{ t('competitions.form.targetLabel') }}
+                    </FieldLabel>
+                    <Input
+                      :id="`comp-target-label-${index}`"
+                      v-model="target.label"
+                      maxlength="40"
+                      :disabled="running"
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel :for="`comp-target-amount-${index}`">
+                      {{ t('competitions.form.targetAmount') }}
+                    </FieldLabel>
+                    <Input
+                      :id="`comp-target-amount-${index}`"
+                      type="number"
+                      min="1"
+                      :model-value="String(target.amount)"
+                      :disabled="running"
+                      @update:model-value="(value: string) => setAmount(target, value)"
+                    />
+                  </Field>
+                  <div class="flex items-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      :disabled="running || form.targets.length <= 1"
+                      @click="removeTarget(index)"
+                    >
+                      {{ t('competitions.form.removeTarget') }}
+                    </Button>
+                  </div>
+                </FieldGroup>
+                <MetricPicker
+                  :id="`comp-target-${index}`"
+                  v-model="target.metric"
+                  :disabled="running"
+                />
+              </div>
+              <div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  :disabled="running || form.targets.length >= MAX_TARGETS"
+                  @click="addTarget"
+                >
+                  {{ t('competitions.form.addTarget') }}
+                </Button>
+              </div>
+            </template>
             <Field>
-              <FieldLabel for="comp-zone">{{ t('competitions.form.timezone') }}</FieldLabel>
+              <FieldLabel for="comp-every">{{ t('competitions.form.countEvery') }}</FieldLabel>
+              <Select
+                :model-value="String(form.countEveryMinutes)"
+                @update:model-value="setCountEvery"
+              >
+                <SelectTrigger id="comp-every" class="w-full sm:w-64"
+                  ><SelectValue
+                /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="minutes in COUNT_EVERY_CHOICES"
+                    :key="minutes"
+                    :value="String(minutes)"
+                  >
+                    {{ t('competitions.form.everyMinutes', { count: minutes }) }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldDescription>{{ t('competitions.form.countEveryHint') }}</FieldDescription>
+            </Field>
+          </section>
+
+          <section class="flex flex-col gap-4">
+            <h3 class="text-sm font-semibold">{{ t('competitions.form.participants') }}</h3>
+            <FieldGroup class="grid gap-4 sm:grid-cols-2">
+              <Field v-if="form.mode === 'ranking'">
+                <FieldLabel for="comp-top">{{ t('competitions.form.top') }}</FieldLabel>
+                <Select :model-value="String(form.top)" @update:model-value="setTop">
+                  <SelectTrigger id="comp-top" class="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem v-for="n in MAX_TOP" :key="n" :value="String(n)">{{
+                      n
+                    }}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <div class="flex items-center gap-3 self-end pb-2">
+                <Switch id="comp-ops" v-model="form.excludeOperators" />
+                <FieldLabel for="comp-ops">{{
+                  t('competitions.form.excludeOperators')
+                }}</FieldLabel>
+              </div>
+            </FieldGroup>
+            <Field>
+              <FieldLabel for="comp-excluded">{{ t('competitions.form.excluded') }}</FieldLabel>
+              <PlayerPicker id="comp-excluded" v-model="form.excluded" :candidates="candidates" />
+              <FieldDescription>{{ t('competitions.form.excludedHint') }}</FieldDescription>
+            </Field>
+          </section>
+
+          <section class="flex flex-col gap-4">
+            <h3 class="text-sm font-semibold">{{ t('competitions.form.rewards') }}</h3>
+            <p class="text-muted-foreground text-xs">
+              {{
+                t('competitions.form.rewardsHint', {
+                  placeholders: placeholderList('command'),
+                })
+              }}
+            </p>
+            <p v-if="!canRewards" class="text-muted-foreground text-xs">
+              {{ t('competitions.form.rewardsNeedConsole') }}
+            </p>
+            <Field v-if="canRewards">
+              <FieldLabel for="comp-test-player">{{
+                t('competitions.form.testPlayer')
+              }}</FieldLabel>
               <Input
-                id="comp-zone"
-                v-model="zoneDraft"
-                list="competitions-timezones"
+                id="comp-test-player"
+                v-model="testPlayer"
+                maxlength="16"
                 autocomplete="off"
                 spellcheck="false"
-                :aria-invalid="!zoneValid"
-                @change="setZone"
+                class="sm:w-64"
               />
-              <datalist id="competitions-timezones">
-                <option v-for="zone in timezones" :key="zone" :value="zone" />
-              </datalist>
+              <FieldDescription>{{ t('competitions.form.testPlayerHint') }}</FieldDescription>
             </Field>
-            <Field>
-              <FieldLabel for="comp-start">{{ t('competitions.form.start') }}</FieldLabel>
-              <Input
-                id="comp-start"
-                v-model="form.start"
-                type="datetime-local"
-                :disabled="running"
+            <Field v-for="place in form.mode === 'goals' ? 1 : form.top" :key="place">
+              <FieldLabel :for="`comp-reward-${place}`">
+                {{
+                  form.mode === 'goals'
+                    ? t('competitions.form.goalsReward')
+                    : t('competitions.form.placeN', { place })
+                }}
+              </FieldLabel>
+              <Textarea
+                :id="`comp-reward-${place}`"
+                v-model="form.rewards[place - 1]"
+                rows="2"
+                class="font-mono"
+                spellcheck="false"
+                :disabled="!canRewards"
               />
+              <div v-if="canRewards" class="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  :disabled="
+                    testing ||
+                    testPlayer.trim() === '' ||
+                    parseCommands(form.rewards[place - 1] ?? '').length === 0
+                  "
+                  @click="testReward(place)"
+                >
+                  {{ t('competitions.form.testReward') }}
+                </Button>
+              </div>
+              <template v-if="tests[place] !== undefined">
+                <p v-if="typeof tests[place] === 'string'" class="text-destructive text-xs">
+                  {{ tests[place] }}
+                </p>
+                <ul v-else class="flex flex-col gap-1 font-mono text-xs">
+                  <li v-for="(result, index) in tests[place]" :key="index">
+                    <span :class="result.ok ? 'text-emerald-600' : 'text-destructive'">
+                      {{ result.ok ? '✓' : '✗' }}
+                    </span>
+                    {{ result.command }}
+                    <span v-if="result.reply" class="text-muted-foreground">
+                      → {{ result.reply }}
+                    </span>
+                  </li>
+                </ul>
+              </template>
             </Field>
-            <Field>
-              <FieldLabel for="comp-end">{{ t('competitions.form.end') }}</FieldLabel>
-              <Input
-                id="comp-end"
-                v-model="form.end"
-                type="datetime-local"
-                :aria-invalid="problems.includes('period')"
-              />
-            </Field>
-          </FieldGroup>
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="text-muted-foreground text-sm">{{ t('competitions.form.period') }}:</span>
-            <Button
-              v-for="period in PERIODS"
-              :key="period.key"
-              type="button"
-              variant="outline"
-              size="sm"
-              @click="applyPeriod(form, period.minutes)"
-            >
-              {{ t(`competitions.form.periods.${period.key}`) }}
-            </Button>
-          </div>
-          <p class="text-muted-foreground text-xs">
-            {{ running ? t('competitions.form.lockedRunning') : t('competitions.form.periodHint') }}
-          </p>
-        </section>
+          </section>
 
-        <section class="flex flex-col gap-4">
-          <h3 class="text-sm font-semibold">{{ t('competitions.form.counting') }}</h3>
-          <Field>
-            <FieldLabel for="comp-mode">{{ t('competitions.form.mode') }}</FieldLabel>
-            <Select :model-value="form.mode" :disabled="running" @update:model-value="setMode">
-              <SelectTrigger id="comp-mode" class="w-full"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ranking">{{ t('competitions.form.modes.ranking') }}</SelectItem>
-                <SelectItem value="goals">{{ t('competitions.form.modes.goals') }}</SelectItem>
-              </SelectContent>
-            </Select>
-            <FieldDescription>{{ t(`competitions.form.modeHints.${form.mode}`) }}</FieldDescription>
-          </Field>
-          <MetricPicker
-            v-if="form.mode === 'ranking'"
-            id="comp-metric"
-            v-model="form.metric"
-            :disabled="running"
-          />
-          <template v-else>
+          <section class="flex flex-col gap-4">
+            <h3 class="text-sm font-semibold">{{ t('competitions.form.messages') }}</h3>
+            <FieldGroup class="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel for="comp-command">{{ t('competitions.form.command') }}</FieldLabel>
+                <Input
+                  id="comp-command"
+                  v-model="form.messages.command"
+                  maxlength="31"
+                  class="font-mono"
+                  spellcheck="false"
+                />
+                <FieldDescription>{{ t('competitions.form.commandHint') }}</FieldDescription>
+              </Field>
+            </FieldGroup>
+            <Field>
+              <FieldLabel for="comp-description">{{
+                t('competitions.form.description')
+              }}</FieldLabel>
+              <Textarea
+                id="comp-description"
+                v-model="form.messages.description"
+                rows="2"
+                :maxlength="MAX_DESCRIPTION_LENGTH"
+              />
+              <FieldDescription>{{ t('competitions.form.descriptionHint') }}</FieldDescription>
+            </Field>
+            <div class="flex items-center gap-3">
+              <Switch id="comp-join-notice" v-model="form.messages.joinNotice" />
+              <FieldLabel for="comp-join-notice">{{
+                t('competitions.form.joinNotice')
+              }}</FieldLabel>
+            </div>
+            <div v-if="form.mode === 'goals'" class="flex items-center gap-3">
+              <Switch id="comp-completions" v-model="form.messages.announceCompletions" />
+              <FieldLabel for="comp-completions">
+                {{ t('competitions.form.announceCompletions') }}
+              </FieldLabel>
+            </div>
+            <div class="flex items-center gap-3">
+              <Switch id="comp-announce" v-model="form.messages.announceResults" />
+              <FieldLabel for="comp-announce">
+                {{ t('competitions.form.announceResults') }}
+              </FieldLabel>
+            </div>
+            <p class="text-muted-foreground text-xs">
+              {{ t('competitions.form.previewNote') }}
+            </p>
+            <Field v-for="key in templateKeys" :key="key">
+              <FieldLabel :for="`comp-template-${key}`">
+                {{ t(`competitions.form.templates.${key}`) }}
+              </FieldLabel>
+              <Textarea
+                :id="`comp-template-${key}`"
+                v-model="form.messages[key]"
+                :rows="templateRows[key]"
+                class="font-mono"
+                spellcheck="false"
+                :aria-invalid="unknownPlaceholders(key, form.messages[key]).length > 0"
+              />
+              <FieldDescription>
+                {{ t('competitions.form.templateHint', { placeholders: placeholderList(key) }) }}
+              </FieldDescription>
+              <MessagePreview
+                v-if="previewOf(key).length > 0"
+                :lines="previewOf(key)"
+                :label="t('competitions.form.preview')"
+              />
+            </Field>
+          </section>
+
+          <section class="flex flex-col gap-4">
+            <h3 class="text-sm font-semibold">{{ t('competitions.form.announcements') }}</h3>
+            <p class="text-muted-foreground text-xs">
+              {{
+                t('competitions.form.announcementsHint', {
+                  placeholders: placeholderList('announce'),
+                })
+              }}
+            </p>
             <div
-              v-for="(target, index) in form.targets"
+              v-for="(announcement, index) in form.announcements"
               :key="index"
               class="flex flex-col gap-3 rounded-md border p-3"
             >
-              <FieldGroup class="grid gap-3 sm:grid-cols-[1fr_8rem_auto]">
+              <FieldGroup class="grid gap-3 sm:grid-cols-[8rem_1fr_auto]">
                 <Field>
-                  <FieldLabel :for="`comp-target-label-${index}`">
-                    {{ t('competitions.form.targetLabel') }}
+                  <FieldLabel :for="`comp-announce-minutes-${index}`">
+                    {{ t('competitions.form.announcementMinutes') }}
                   </FieldLabel>
                   <Input
-                    :id="`comp-target-label-${index}`"
-                    v-model="target.label"
-                    maxlength="40"
-                    :disabled="running"
+                    :id="`comp-announce-minutes-${index}`"
+                    type="number"
+                    min="0"
+                    :max="MAX_ANNOUNCEMENT_MINUTES"
+                    :model-value="String(announcement.minutesBefore)"
+                    :aria-invalid="duplicateMoment(index)"
+                    @update:model-value="(value: string) => setMinutes(announcement, value)"
                   />
                 </Field>
                 <Field>
-                  <FieldLabel :for="`comp-target-amount-${index}`">
-                    {{ t('competitions.form.targetAmount') }}
+                  <FieldLabel :for="`comp-announce-anchor-${index}`">
+                    {{ t('competitions.form.announcementAnchor') }}
                   </FieldLabel>
-                  <Input
-                    :id="`comp-target-amount-${index}`"
-                    type="number"
-                    min="1"
-                    :model-value="String(target.amount)"
-                    :disabled="running"
-                    @update:model-value="(value: string) => setAmount(target, value)"
-                  />
+                  <Select
+                    :model-value="announcement.anchor"
+                    @update:model-value="(value: unknown) => setAnchor(announcement, value)"
+                  >
+                    <SelectTrigger :id="`comp-announce-anchor-${index}`" class="w-full sm:w-56">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="start">{{
+                        t('competitions.form.anchors.start')
+                      }}</SelectItem>
+                      <SelectItem value="end">{{ t('competitions.form.anchors.end') }}</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </Field>
                 <div class="flex items-end">
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    :disabled="running || form.targets.length <= 1"
-                    @click="removeTarget(index)"
+                    @click="removeAnnouncement(index)"
                   >
-                    {{ t('competitions.form.removeTarget') }}
+                    {{ t('competitions.form.removeAnnouncement') }}
                   </Button>
                 </div>
               </FieldGroup>
-              <MetricPicker
-                :id="`comp-target-${index}`"
-                v-model="target.metric"
-                :disabled="running"
+              <Field>
+                <FieldLabel :for="`comp-announce-text-${index}`">
+                  {{ t('competitions.form.announcementText') }}
+                </FieldLabel>
+                <Textarea
+                  :id="`comp-announce-text-${index}`"
+                  v-model="announcement.text"
+                  rows="2"
+                  class="font-mono"
+                  spellcheck="false"
+                />
+                <FieldDescription v-if="duplicateMoment(index)" class="text-destructive">
+                  {{ t('competitions.form.duplicateMoment') }}
+                </FieldDescription>
+              </Field>
+              <MessagePreview
+                v-if="announcementPreview(announcement).length > 0"
+                :lines="announcementPreview(announcement)"
+                :label="t('competitions.form.preview')"
               />
             </div>
             <div>
@@ -523,285 +895,44 @@ async function testReward(place: number): Promise<void> {
                 type="button"
                 variant="outline"
                 size="sm"
-                :disabled="running || form.targets.length >= MAX_TARGETS"
-                @click="addTarget"
+                :disabled="form.announcements.length >= MAX_ANNOUNCEMENTS"
+                @click="addAnnouncement"
               >
-                {{ t('competitions.form.addTarget') }}
+                {{ t('competitions.form.addAnnouncement') }}
               </Button>
             </div>
-          </template>
-          <Field>
-            <FieldLabel for="comp-every">{{ t('competitions.form.countEvery') }}</FieldLabel>
-            <Select
-              :model-value="String(form.countEveryMinutes)"
-              @update:model-value="setCountEvery"
-            >
-              <SelectTrigger id="comp-every" class="w-full sm:w-64"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem
-                  v-for="minutes in COUNT_EVERY_CHOICES"
-                  :key="minutes"
-                  :value="String(minutes)"
-                >
-                  {{ t('competitions.form.everyMinutes', { count: minutes }) }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <FieldDescription>{{ t('competitions.form.countEveryHint') }}</FieldDescription>
-          </Field>
-        </section>
+          </section>
+        </template>
 
-        <section class="flex flex-col gap-4">
-          <h3 class="text-sm font-semibold">{{ t('competitions.form.participants') }}</h3>
-          <FieldGroup class="grid gap-4 sm:grid-cols-2">
-            <Field v-if="form.mode === 'ranking'">
-              <FieldLabel for="comp-top">{{ t('competitions.form.top') }}</FieldLabel>
-              <Select :model-value="String(form.top)" @update:model-value="setTop">
-                <SelectTrigger id="comp-top" class="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem v-for="n in MAX_TOP" :key="n" :value="String(n)">{{ n }}</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            <div class="flex items-center gap-3 self-end pb-2">
-              <Switch id="comp-ops" v-model="form.excludeOperators" />
-              <FieldLabel for="comp-ops">{{ t('competitions.form.excludeOperators') }}</FieldLabel>
-            </div>
-          </FieldGroup>
-          <Field>
-            <FieldLabel for="comp-excluded">{{ t('competitions.form.excluded') }}</FieldLabel>
-            <PlayerPicker id="comp-excluded" v-model="form.excluded" :candidates="candidates" />
-            <FieldDescription>{{ t('competitions.form.excludedHint') }}</FieldDescription>
-          </Field>
-        </section>
-
-        <section class="flex flex-col gap-4">
-          <h3 class="text-sm font-semibold">{{ t('competitions.form.rewards') }}</h3>
-          <p class="text-muted-foreground text-xs">
-            {{
-              t('competitions.form.rewardsHint', {
-                placeholders: placeholderList('command'),
-              })
-            }}
-          </p>
-          <p v-if="!canRewards" class="text-muted-foreground text-xs">
-            {{ t('competitions.form.rewardsNeedConsole') }}
-          </p>
-          <Field v-if="canRewards">
-            <FieldLabel for="comp-test-player">{{ t('competitions.form.testPlayer') }}</FieldLabel>
-            <Input
-              id="comp-test-player"
-              v-model="testPlayer"
-              maxlength="16"
-              autocomplete="off"
-              spellcheck="false"
-              class="sm:w-64"
-            />
-            <FieldDescription>{{ t('competitions.form.testPlayerHint') }}</FieldDescription>
-          </Field>
-          <Field v-for="place in form.mode === 'goals' ? 1 : form.top" :key="place">
-            <FieldLabel :for="`comp-reward-${place}`">
-              {{
-                form.mode === 'goals'
-                  ? t('competitions.form.goalsReward')
-                  : t('competitions.form.placeN', { place })
-              }}
-            </FieldLabel>
-            <Textarea
-              :id="`comp-reward-${place}`"
-              v-model="form.rewards[place - 1]"
-              rows="2"
-              class="font-mono"
-              spellcheck="false"
-              :disabled="!canRewards"
-            />
-            <div v-if="canRewards" class="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                :disabled="
-                  testing ||
-                  testPlayer.trim() === '' ||
-                  parseCommands(form.rewards[place - 1] ?? '').length === 0
-                "
-                @click="testReward(place)"
-              >
-                {{ t('competitions.form.testReward') }}
-              </Button>
-            </div>
-            <template v-if="tests[place] !== undefined">
-              <p v-if="typeof tests[place] === 'string'" class="text-destructive text-xs">
-                {{ tests[place] }}
-              </p>
-              <ul v-else class="flex flex-col gap-1 font-mono text-xs">
-                <li v-for="(result, index) in tests[place]" :key="index">
-                  <span :class="result.ok ? 'text-emerald-600' : 'text-destructive'">
-                    {{ result.ok ? '✓' : '✗' }}
-                  </span>
-                  {{ result.command }}
-                  <span v-if="result.reply" class="text-muted-foreground">
-                    → {{ result.reply }}
-                  </span>
-                </li>
-              </ul>
-            </template>
-          </Field>
-        </section>
-
-        <section class="flex flex-col gap-4">
-          <h3 class="text-sm font-semibold">{{ t('competitions.form.messages') }}</h3>
-          <FieldGroup class="grid gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel for="comp-command">{{ t('competitions.form.command') }}</FieldLabel>
-              <Input
-                id="comp-command"
-                v-model="form.messages.command"
-                maxlength="31"
-                class="font-mono"
-                spellcheck="false"
-              />
-              <FieldDescription>{{ t('competitions.form.commandHint') }}</FieldDescription>
-            </Field>
-          </FieldGroup>
-          <Field>
-            <FieldLabel for="comp-description">{{ t('competitions.form.description') }}</FieldLabel>
-            <Textarea
-              id="comp-description"
-              v-model="form.messages.description"
-              rows="2"
-              :maxlength="MAX_DESCRIPTION_LENGTH"
-            />
-            <FieldDescription>{{ t('competitions.form.descriptionHint') }}</FieldDescription>
-          </Field>
-          <div class="flex items-center gap-3">
-            <Switch id="comp-join-notice" v-model="form.messages.joinNotice" />
-            <FieldLabel for="comp-join-notice">{{ t('competitions.form.joinNotice') }}</FieldLabel>
-          </div>
-          <div v-if="form.mode === 'goals'" class="flex items-center gap-3">
-            <Switch id="comp-completions" v-model="form.messages.announceCompletions" />
-            <FieldLabel for="comp-completions">
-              {{ t('competitions.form.announceCompletions') }}
-            </FieldLabel>
-          </div>
-          <div class="flex items-center gap-3">
-            <Switch id="comp-announce" v-model="form.messages.announceResults" />
-            <FieldLabel for="comp-announce">
-              {{ t('competitions.form.announceResults') }}
-            </FieldLabel>
-          </div>
-          <p class="text-muted-foreground text-xs">
-            {{ t('competitions.form.previewNote') }}
-          </p>
-          <Field v-for="key in templateKeys" :key="key">
-            <FieldLabel :for="`comp-template-${key}`">
-              {{ t(`competitions.form.templates.${key}`) }}
-            </FieldLabel>
-            <Textarea
-              :id="`comp-template-${key}`"
-              v-model="form.messages[key]"
-              :rows="templateRows[key]"
-              class="font-mono"
-              spellcheck="false"
-              :aria-invalid="unknownPlaceholders(key, form.messages[key]).length > 0"
-            />
-            <FieldDescription>
-              {{ t('competitions.form.templateHint', { placeholders: placeholderList(key) }) }}
-            </FieldDescription>
-            <MessagePreview
-              v-if="previewOf(key).length > 0"
-              :lines="previewOf(key)"
-              :label="t('competitions.form.preview')"
-            />
-          </Field>
-        </section>
-
-        <section class="flex flex-col gap-4">
-          <h3 class="text-sm font-semibold">{{ t('competitions.form.announcements') }}</h3>
-          <p class="text-muted-foreground text-xs">
-            {{
-              t('competitions.form.announcementsHint', {
-                placeholders: placeholderList('announce'),
-              })
-            }}
-          </p>
-          <div
-            v-for="(announcement, index) in form.announcements"
-            :key="index"
-            class="flex flex-col gap-3 rounded-md border p-3"
-          >
-            <FieldGroup class="grid gap-3 sm:grid-cols-[8rem_1fr_auto]">
-              <Field>
-                <FieldLabel :for="`comp-announce-minutes-${index}`">
-                  {{ t('competitions.form.announcementMinutes') }}
-                </FieldLabel>
-                <Input
-                  :id="`comp-announce-minutes-${index}`"
-                  type="number"
-                  min="0"
-                  :max="MAX_ANNOUNCEMENT_MINUTES"
-                  :model-value="String(announcement.minutesBefore)"
-                  :aria-invalid="duplicateMoment(index)"
-                  @update:model-value="(value: string) => setMinutes(announcement, value)"
-                />
-              </Field>
-              <Field>
-                <FieldLabel :for="`comp-announce-anchor-${index}`">
-                  {{ t('competitions.form.announcementAnchor') }}
-                </FieldLabel>
-                <Select
-                  :model-value="announcement.anchor"
-                  @update:model-value="(value: unknown) => setAnchor(announcement, value)"
-                >
-                  <SelectTrigger :id="`comp-announce-anchor-${index}`" class="w-full sm:w-56">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="start">{{
-                      t('competitions.form.anchors.start')
-                    }}</SelectItem>
-                    <SelectItem value="end">{{ t('competitions.form.anchors.end') }}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <div class="flex items-end">
-                <Button type="button" variant="ghost" size="sm" @click="removeAnnouncement(index)">
-                  {{ t('competitions.form.removeAnnouncement') }}
-                </Button>
-              </div>
-            </FieldGroup>
-            <Field>
-              <FieldLabel :for="`comp-announce-text-${index}`">
-                {{ t('competitions.form.announcementText') }}
-              </FieldLabel>
-              <Textarea
-                :id="`comp-announce-text-${index}`"
-                v-model="announcement.text"
-                rows="2"
-                class="font-mono"
-                spellcheck="false"
-              />
-              <FieldDescription v-if="duplicateMoment(index)" class="text-destructive">
-                {{ t('competitions.form.duplicateMoment') }}
-              </FieldDescription>
-            </Field>
-            <MessagePreview
-              v-if="announcementPreview(announcement).length > 0"
-              :lines="announcementPreview(announcement)"
-              :label="t('competitions.form.preview')"
-            />
-          </div>
-          <div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              :disabled="form.announcements.length >= MAX_ANNOUNCEMENTS"
-              @click="addAnnouncement"
-            >
-              {{ t('competitions.form.addAnnouncement') }}
+        <section v-else class="flex flex-col gap-3">
+          <p class="text-muted-foreground text-xs">{{ t('competitions.form.jsonHint') }}</p>
+          <Textarea
+            v-model="jsonText"
+            rows="24"
+            class="font-mono text-xs"
+            spellcheck="false"
+            aria-label="JSON"
+            :aria-invalid="jsonErrors.length > 0"
+          />
+          <div class="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" @click="copyJson">
+              {{ copied ? t('competitions.form.copied') : t('competitions.form.copyJson') }}
+            </Button>
+            <Button type="button" variant="outline" size="sm" @click="applyJson">
+              {{ t('competitions.form.applyJson') }}
             </Button>
           </div>
+          <Alert v-if="jsonErrors.length > 0" variant="destructive">
+            <CircleAlertIcon />
+            <AlertDescription>
+              <ul class="flex flex-col gap-1 font-mono text-xs">
+                <li v-for="error in jsonErrors" :key="error">{{ error }}</li>
+              </ul>
+            </AlertDescription>
+          </Alert>
+          <p v-if="jsonIgnored.length > 0" class="text-muted-foreground text-xs">
+            {{ t('competitions.form.jsonIgnored', { keys: jsonIgnored.join(', ') }) }}
+          </p>
         </section>
 
         <Alert v-if="state.error" variant="destructive">

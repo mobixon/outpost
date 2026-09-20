@@ -279,6 +279,13 @@ many blocks each player mines — the weekly top three wood cutters, for example
   1 minute" and "is on". A new event has these three ready to edit. One message per moment; a
   message that is late by more than a few minutes, because Outpost was not running, is skipped.
 - **Copy** starts a new event from an existing one, from the next minute on, with the same length.
+- **JSON** in the editor shows the event as the JSON the API takes, to edit or replace by paste, for
+  changing many things at once or moving an event to another server. What the JSON leaves out keeps
+  its value from the form, one level down for the texts and the participants, so a small piece
+  changes only what it says; mistakes are shown with their place (`participants.top: …`) and keys
+  Outpost does not know are listed as ignored. **Copy as JSON** on an event puts it on the clipboard.
+  The players left out and the commands of the rewards travel with the JSON; the UUIDs of players
+  are those of the server it came from.
 - **Rewards** are console commands for the winner of each place, such as `give {player} diamond 5`,
   with `{player}`, `{uuid}`, `{place}`, `{score}` and `{event}` filled in. A command runs when the
   winner is online, so a winner who is away gets it on joining. Every command has a status on the

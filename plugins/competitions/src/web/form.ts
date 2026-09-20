@@ -1,5 +1,6 @@
 import { instantToZoned, zonedToInstant } from '@outpost/shared';
 import {
+  eventInputSchema,
   DEFAULT_COUNT_MINUTES,
   announcementKey,
   defaultAnnouncements,
@@ -157,7 +158,23 @@ export function emptyForm(timezone: string, now = Date.now()): EditorForm {
   };
 }
 
-export function fromEvent(event: CompetitionEvent): EditorForm {
+/** What makes an event, as the editor and the JSON view see it. */
+type EventParts = Pick<
+  CompetitionEvent,
+  | 'name'
+  | 'timezone'
+  | 'startsAt'
+  | 'endsAt'
+  | 'metric'
+  | 'scoring'
+  | 'participants'
+  | 'rewards'
+  | 'messages'
+  | 'countEveryMinutes'
+  | 'announcements'
+>;
+
+export function fromEvent(event: EventParts): EditorForm {
   const rewards = Array.from({ length: MAX_TOP }, () => '');
   for (const reward of event.rewards.places) {
     rewards[reward.place - 1] = reward.commands.join('\n');
@@ -323,4 +340,88 @@ export function toInput(form: EditorForm): EventInput | null {
       text: announcement.text.trim(),
     })),
   };
+}
+
+/** An event as the request body of the API shows it: what to copy to make the same event. */
+export function inputOf(event: EventParts): EventInput {
+  return {
+    name: event.name,
+    timezone: event.timezone,
+    startsAt: event.startsAt,
+    endsAt: event.endsAt,
+    ...(event.scoring.kind === 'sum' && event.metric !== undefined && { metric: event.metric }),
+    scoring: event.scoring,
+    participants: event.participants,
+    rewards: {
+      places: event.rewards.places.map((reward) => ({
+        place: reward.place,
+        commands: [...reward.commands],
+      })),
+    },
+    messages: event.messages,
+    countEveryMinutes: event.countEveryMinutes,
+    announcements: event.announcements,
+  };
+}
+
+/** The keys of an event in JSON; others are ignored. */
+const JSON_KEYS = [
+  'name',
+  'timezone',
+  'startsAt',
+  'endsAt',
+  'metric',
+  'scoring',
+  'participants',
+  'rewards',
+  'messages',
+  'countEveryMinutes',
+  'announcements',
+] as const;
+
+export type JsonResult =
+  { ok: true; form: EditorForm; ignored: string[] } | { ok: false; errors: string[] };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** The most problems shown of a JSON that does not fit. */
+const MAX_JSON_ERRORS = 8;
+
+/**
+ * Reads an event from JSON pasted or edited by hand. What the JSON leaves out keeps its value from
+ * `current`, one level down for the texts, participants and rewards: a small piece of JSON changes
+ * only what it says.
+ */
+export function formFromJson(text: string, current: EditorForm): JsonResult {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch (err) {
+    return { ok: false, errors: [`Not valid JSON: ${err instanceof Error ? err.message : err}`] };
+  }
+  if (!isRecord(raw)) return { ok: false, errors: ['The JSON must be an object {…}'] };
+  const base = toInput(current);
+  if (base === null) return { ok: false, errors: ['The times of the form are not valid'] };
+  const nested = (key: 'messages' | 'participants') => ({
+    ...base[key],
+    ...(isRecord(raw[key]) ? raw[key] : {}),
+  });
+  const merged = {
+    ...base,
+    ...raw,
+    messages: nested('messages'),
+    participants: nested('participants'),
+  };
+  const parsed = eventInputSchema.safeParse(merged);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      errors: parsed.error.issues
+        .slice(0, MAX_JSON_ERRORS)
+        .map((issue) => `${issue.path.join('.') || '(event)'}: ${issue.message}`),
+    };
+  }
+  const ignored = Object.keys(raw).filter((key) => !(JSON_KEYS as readonly string[]).includes(key));
+  return { ok: true, form: fromEvent(parsed.data), ignored };
 }

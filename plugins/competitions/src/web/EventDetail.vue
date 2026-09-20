@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { ArrowLeftIcon, CircleAlertIcon, CopyIcon, PencilIcon, RefreshCwIcon } from '@lucide/vue';
+import {
+  ArrowLeftIcon,
+  BracesIcon,
+  CircleAlertIcon,
+  CopyIcon,
+  PencilIcon,
+  RefreshCwIcon,
+} from '@lucide/vue';
 import { parseMessage, serverPluginApiPath } from '@outpost/shared';
 import {
   Alert,
@@ -38,7 +45,7 @@ import {
   type EventDetail,
   type RewardStatus,
 } from '../shared.js';
-import { describe, eventText, formatSpan, formatTime } from './util.js';
+import { copyEventJson, describe, eventText, formatSpan, formatTime } from './util.js';
 
 const REFRESH_MS = 15_000;
 /** A start later than this after the planned one is worth a warning. */
@@ -56,6 +63,7 @@ const canRewards = computed(() => can(CompetitionsPermission.rewards));
 
 const detail = ref<EventDetail | null>(null);
 const confirmingCount = ref(false);
+const copiedJson = ref(false);
 const error = ref<string | null>(null);
 const busy = ref(false);
 
@@ -79,6 +87,18 @@ async function reward(status: RewardStatus, action: 'retry' | 'cancel'): Promise
     error.value = describe(err, t, te);
   } finally {
     busy.value = false;
+  }
+}
+
+async function copyJson(): Promise<void> {
+  if (event.value === null) return;
+  if (await copyEventJson(event.value)) {
+    copiedJson.value = true;
+    setTimeout(() => {
+      copiedJson.value = false;
+    }, 2000);
+  } else {
+    error.value = t('competitions.detail.copyJsonFailed');
   }
 }
 
@@ -173,6 +193,10 @@ defineExpose({ reload: load });
       >
         <RefreshCwIcon />
         {{ t('competitions.detail.countNow') }}
+      </Button>
+      <Button v-if="canManage && event" variant="outline" size="sm" @click="copyJson">
+        <BracesIcon />
+        {{ copiedJson ? t('competitions.detail.copiedJson') : t('competitions.actions.copyJson') }}
       </Button>
       <Button v-if="canManage && event" variant="outline" size="sm" @click="emit('clone')">
         <CopyIcon />

@@ -5,6 +5,8 @@ import {
   changeTimezone,
   cloneForm,
   emptyForm,
+  formFromJson,
+  inputOf,
   emptyMetricForm,
   metricFormOf,
   parseBlocks,
@@ -201,6 +203,75 @@ describe('the competition form', () => {
     form.metric.ids = '';
     expect(problemsOf(form)).toEqual(['metric']);
     expect(metricFormOf(toInput(form)?.metric as Metric).category).toBe('picked_up');
+  });
+
+  it('changes only what a small piece of JSON says', () => {
+    const form = emptyForm('UTC', NOW);
+    form.name = 'Old';
+    form.messages.description = 'Kept';
+    const result = formFromJson(
+      '{ "name": "Ice Rush", "participants": { "top": 5 }, "messages": { "command": "!ice" }, "colour": 1 }',
+      form,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.form).toMatchObject({
+      name: 'Ice Rush',
+      top: 5,
+      excludeOperators: true,
+      start: form.start,
+      end: form.end,
+    });
+    expect(result.form.messages).toMatchObject({ command: '!ice', description: 'Kept' });
+    expect(result.ignored).toEqual(['colour']);
+  });
+
+  it('says what is wrong with a JSON that does not fit', () => {
+    const form = emptyForm('UTC', NOW);
+    form.name = 'x';
+    const errors = (text: string) => {
+      const result = formFromJson(text, form);
+      return result.ok ? [] : result.errors;
+    };
+    expect(errors('{ "name": ')[0]).toMatch(/^Not valid JSON/);
+    expect(errors('[1]')).toEqual(['The JSON must be an object {…}']);
+    expect(errors('{ "endsAt": "2020-01-01T00:00:00Z" }')).toEqual([
+      'endsAt: The end must be after the start',
+    ]);
+    expect(errors('{ "participants": { "top": 99 }, "countEveryMinutes": 0 }').sort()).toEqual([
+      'countEveryMinutes: Too small: expected number to be >=1',
+      'participants.top: Too big: expected number to be <=10',
+    ]);
+    expect(
+      errors(
+        '{ "metric": { "kind": "stat", "category": "killed", "presets": ["ore_drops"], "ids": [] } }',
+      ),
+    ).toEqual(['metric: Pick what is counted']);
+  });
+
+  it('copies an event as JSON and reads the same event back, for goals too', () => {
+    const goals = emptyForm('Europe/Berlin', NOW);
+    goals.name = 'Quest';
+    switchMode(goals, 'goals');
+    goals.targets = [
+      {
+        label: 'Spruce',
+        metric: { ...emptyMetricForm(), presets: [], blocks: 'spruce_log' },
+        amount: 20,
+      },
+    ];
+    goals.rewards[0] = 'give {player} diamond 1';
+    for (const form of [emptyForm('Europe/Berlin', NOW), goals]) {
+      form.name = form.name === '' ? 'Wood' : form.name;
+      form.rewards[0] = 'give {player} diamond 1';
+      const input = toInput(form);
+      expect(input).not.toBeNull();
+      const parts = eventInputSchema.parse(input);
+      const json = JSON.stringify(inputOf(parts as never), null, 2);
+      const back = formFromJson(json, emptyForm('UTC', NOW));
+      expect(back.ok).toBe(true);
+      if (back.ok) expect(toInput(back.form)).toEqual(input);
+    }
   });
 
   it('reads blocks and commands from text', () => {
