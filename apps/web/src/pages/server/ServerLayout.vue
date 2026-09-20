@@ -23,6 +23,8 @@ interface Tab {
   permission: string;
   /** The server needs this capability, or one of these. */
   capability?: string | readonly string[];
+  /** The plugin of the tab; unset for the tabs of the core. */
+  pluginId?: string;
   /** The games of the tab's plugin; null or unset for any game. */
   games?: readonly string[] | null;
   order: number;
@@ -92,6 +94,7 @@ const tabs = computed(() => {
       // A module shows when it supports the game, the server can do what it needs and the
       // user may use it.
       (tab) =>
+        (tab.pluginId === undefined || !current.disabledModules.includes(tab.pluginId)) &&
         (tab.games == null || tab.games.includes(current.game)) &&
         (tab.capability === undefined ||
           (typeof tab.capability === 'string' ? [tab.capability] : tab.capability).some(

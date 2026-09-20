@@ -18,6 +18,21 @@ Owners rename a server and delete it under **Settings**. Deleting removes the se
 with its members and invitations; the game server itself is not touched, and the audit log keeps
 its entries.
 
+## Modules of a server
+
+Every module is on for every server until an owner switches it off under **Settings → Modules**
+(superadmins can too). A module that is off does not show its tab, does not answer its routes
+(`409 module_disabled`) and, above all, is not asked to look at the game server: the Players module
+stops asking who is online every 15 seconds, the Scheduler runs nothing, an event of the Events
+module waits as it is and stops following the log, and the rewards and tasks of the module wait for
+it. Its data is kept, and it all goes on when the module is switched on again, so an event whose
+time passed meanwhile starts or ends only then. The **essential** modules, now the Console, cannot be
+switched off. Switching a module on or off is written to the audit log
+(`server.module_enabled`, `server.module_disabled`).
+
+To have a module off on every server, leave it out of `OUTPOST_PLUGINS` (see
+[configuration](configuration.md)).
+
 ## Connecting a server
 
 A server is connected through **connectors**, which superadmins set up under **Settings**. Each
@@ -402,6 +417,13 @@ which servers are theirs. `ctx.commands.send(serverId, command)` runs a console 
 through the RCON connector (capability `commands.send`), `ctx.files` reads, writes, stats and lists the files of the server through the Files connector (`files.read`, `files.write`; paths relative to the server's folder) — only those the plugin declares in `files`, where `*` stands for any part of a name and `**` for any number of folders, and paths in `write` may also be read; other paths are refused with `403 file_out_of_scope`, and listings show only the declared files — `ctx.logs` gives the recent lines of the server log and the new ones as they are written (`logs.stream`), `ctx.http.serverEvents` streams server-sent events to the browser with the same checks as a server route, `ctx.permissions.has()` checks a permission elsewhere (for example for live updates), and `ctx.secrets` encrypts secrets the plugin
 stores. The web part of a plugin adds a tab to the server page with `serverTabs`, shown to users
 with the tab's permission.
+
+A plugin with `games` is a module of servers, which owners can switch off for a server, unless it
+sets `essential: true`; a plugin without `games` is not tied to servers. `ctx.servers.supports(server)`
+is false for a server where the plugin is off, and `ctx.servers.enabledFor(serverId)` tells it
+without the server; a background job must check one of them for every server before it touches it,
+and listen to the event `outpost.module.changed` (`{ serverId, pluginId, enabled }`) if it keeps
+something open per server.
 
 More services of the platform, each with its capability (see above):
 

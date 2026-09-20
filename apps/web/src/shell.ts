@@ -7,6 +7,8 @@ import { inject, type Component, type InjectionKey } from 'vue';
 export interface ShellServerTab {
   /** `<plugin id>.<tab key>`. */
   id: string;
+  /** The plugin the tab belongs to; the tab is hidden on servers where it is switched off. */
+  pluginId: string;
   key: string;
   label: string;
   icon: Component;
@@ -91,6 +93,7 @@ export function buildServerTabs(
   return plugins.flatMap((plugin) =>
     (plugin.serverTabs ?? []).map((tab) => ({
       id: `${plugin.id}.${tab.key}`,
+      pluginId: plugin.id,
       key: tab.key,
       label: tab.label,
       icon: tab.icon,

@@ -604,6 +604,45 @@ describe('competitions', () => {
     expect(finished.completedCount).toBe(1);
   }, 60_000);
 
+  it('wait while the module is switched off for the server, and go on when it is back', async () => {
+    const { server, owner, url, serverId } = await setUp();
+    const created = await send(server, 'POST', `${url}/events`, {
+      cookie: owner.cookie,
+      body: definition({
+        startsAt: new Date(Date.now() + 1500).toISOString(),
+        endsAt: new Date(Date.now() + 120_000).toISOString(),
+        rewards: { places: [] },
+      }),
+    });
+    expect(created.statusCode).toBe(200);
+    const id = created.json<{ id: string }>().id;
+    const modules = `/api/v1/servers/${serverId}/modules/outpost.competitions`;
+    const flushes = () => rcon.commands.filter((command) => command === 'save-all flush').length;
+
+    // Off before the start: the start passes and nothing is asked of the game server.
+    expect(
+      (await send(server, 'PUT', modules, { cookie: owner.cookie, body: { enabled: false } }))
+        .statusCode,
+    ).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    expect(flushes()).toBe(0);
+    expect((await get(server, `${url}/events/${id}`, owner.cookie)).json()).toMatchObject({
+      error: { code: 'module_disabled' },
+    });
+
+    // Back on: the event starts.
+    await send(server, 'PUT', modules, { cookie: owner.cookie, body: { enabled: true } });
+    await vi.waitFor(
+      async () =>
+        expect(
+          (await get(server, `${url}/events/${id}`, owner.cookie)).json<Detail>().event.state,
+        ).toBe('active'),
+      { timeout: 5000, interval: 100 },
+    );
+    expect(flushes()).toBeGreaterThan(0);
+    await send(server, 'POST', `${url}/events/${id}/cancel`, { cookie: owner.cookie });
+  }, 30_000);
+
   it('list the players to pick from, with the operators marked', async () => {
     const { server, owner, viewer, url } = await setUp();
     const players = await get(server, `${url}/players`, owner.cookie);

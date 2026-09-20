@@ -330,6 +330,29 @@ export default {
   games: {
     'minecraft-java': 'Minecraft: Java Edition',
   },
+  modules: {
+    title: 'Modules',
+    text: 'A module that is off shows no tab, does not answer and does not ask the game server anything; its data is kept. The essential modules cannot be switched off.',
+    essential: 'Always on',
+    switch: 'Module {name} on this server',
+    names: {
+      outpost_console: 'Console',
+      outpost_players: 'Players',
+      outpost_player_details: 'Player details',
+      outpost_scheduler: 'Scheduler',
+      outpost_competitions: 'Events',
+    },
+    texts: {
+      outpost_console: 'Commands, chat messages and the live log of the server.',
+      outpost_players:
+        'Who is online, history, the whitelist, bans and operators. Asks the server who is online every 15 seconds.',
+      outpost_player_details:
+        'Inventories, statistics and advancements from the world files. Asks nothing of the game server.',
+      outpost_scheduler: 'Commands and announcements on a schedule.',
+      outpost_competitions:
+        'Timed competitions and goals with standings and rewards. While an event runs it follows the log and counts the statistics.',
+    },
+  },
   servers: {
     add: {
       title: 'Add a server',

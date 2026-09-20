@@ -41,8 +41,15 @@ export interface PluginDefinition extends PluginManifest {
   /**
    * The games the plugin supports, e.g. `['minecraft-java']`; unset for a plugin that works with
    * any game. Outpost shows its server tabs and serves its server routes only for these games.
+   * A plugin with `games` is a module of servers: owners can switch it off for a server, unless it
+   * is `essential`. A plugin without `games` is not tied to servers and cannot be switched off.
    */
   games?: readonly string[];
+  /**
+   * The plugin cannot be switched off for a server: the console and the like, without which a
+   * server cannot be managed. Every other module of servers can be.
+   */
+  essential?: boolean;
   /**
    * The files of a game server the plugin reads and writes through `ctx.files`, e.g.
    * `{ read: ['server.properties'], write: ['whitelist.json'] }`. Outpost refuses other paths.

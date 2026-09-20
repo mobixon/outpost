@@ -38,6 +38,8 @@ export const serverSummarySchema = z.object({
   connectors: z.array(z.enum(CONNECTOR_TYPES)),
   /** The game of the server, e.g. `minecraft-java`; chosen when it was added, never changed. */
   game: z.string(),
+  /** The ids of the modules switched off for this server. */
+  disabledModules: z.array(z.string()),
   createdAt: z.string(),
 });
 export type ServerSummary = z.infer<typeof serverSummarySchema>;
@@ -129,3 +131,17 @@ export const auditQuerySchema = z.object({
 export const globalAuditQuerySchema = auditQuerySchema.extend({
   serverId: z.string().optional(),
 });
+
+/** A module of a server, and whether it is on for it. */
+export const serverModuleSchema = z.object({
+  id: z.string(),
+  version: z.string(),
+  /** The module cannot be switched off. */
+  essential: z.boolean(),
+  enabled: z.boolean(),
+});
+export type ServerModule = z.infer<typeof serverModuleSchema>;
+
+export const serverModuleListSchema = z.object({ modules: z.array(serverModuleSchema) });
+
+export const serverModuleUpdateSchema = z.object({ enabled: z.boolean() });

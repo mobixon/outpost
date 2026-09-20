@@ -36,6 +36,8 @@ export const pluginInfoSchema = z.object({
   version: z.string(),
   /** The games the plugin supports; null when it works with any game. */
   games: z.array(z.string()).nullable(),
+  /** The plugin cannot be switched off for a server. */
+  essential: z.boolean(),
 });
 export type PluginInfo = z.infer<typeof pluginInfoSchema>;
 

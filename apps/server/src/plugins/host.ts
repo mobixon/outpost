@@ -115,7 +115,7 @@ export interface PluginHostOptions {
   permissions: PermissionRegistry;
   /** Key material for the plugins' secret boxes. */
   secretKey: string;
-  servers: Omit<PluginContext['servers'], 'supports'>;
+  servers: Omit<PluginContext['servers'], 'supports' | 'enabledFor'>;
   commands: PluginContext['commands'];
   files: PluginContext['files'];
   logs: PluginContext['logs'];
@@ -125,6 +125,8 @@ export interface PluginHostOptions {
   /** The tasks of a plugin; `inSetup` tells whether the plugin is still in its `setup`. */
   playerTasks(pluginId: string, inSetup: () => boolean): PluginContext['playerTasks'];
   hasPermission: PluginContext['permissions']['has'];
+  /** Which modules are switched off for which servers. */
+  modules: { isEnabled(serverId: string, pluginId: string): boolean };
   /** Mounts a plugin route on the HTTP server. */
   registerRoute(pluginId: string, route: RouteDefinition<RouteSchema, RouteAccess>): void;
   /** Mounts a plugin route of a game server; `games` are those the plugin supports (null: all). */
@@ -141,8 +143,13 @@ export interface PluginHostOptions {
   ): void;
 }
 
-function infoOf({ id, version, games }: PluginDefinition): PluginInfo {
-  return { id, version, games: games === undefined ? null : [...games] };
+function infoOf({ id, version, games, essential }: PluginDefinition): PluginInfo {
+  return {
+    id,
+    version,
+    games: games === undefined ? null : [...games],
+    essential: essential === true,
+  };
 }
 
 /** Runs plugin migrations and `setup` in dependency order, and plugin cleanups on shutdown. */
@@ -226,7 +233,10 @@ export class PluginHost {
         kv: createKeyValueStore(db, plugin.id),
         servers: {
           ...this.#options.servers,
-          supports: (server) => plugin.games === undefined || plugin.games.includes(server.game),
+          supports: (server) =>
+            (plugin.games === undefined || plugin.games.includes(server.game)) &&
+            this.#options.modules.isEnabled(server.id, plugin.id),
+          enabledFor: (serverId) => this.#options.modules.isEnabled(serverId, plugin.id),
         },
         commands: this.#options.commands,
         files: scopedFiles(plugin.id, plugin.files, this.#options.files),

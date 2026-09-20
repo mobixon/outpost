@@ -14,6 +14,7 @@ export interface CoreTables {
   invitations: InvitationsTable;
   audit_log: AuditLogTable;
   player_tasks: PlayerTasksTable;
+  server_disabled_modules: ServerDisabledModulesTable;
 }
 
 export interface MigrationsTable {
@@ -173,4 +174,12 @@ export interface PlayerTasksTable {
   retry_at: number;
   created_at: number;
   updated_at: number;
+}
+
+/** Modules an owner has switched off for a server. */
+export interface ServerDisabledModulesTable {
+  server_id: string;
+  plugin_id: string;
+  disabled_by: string | null;
+  disabled_at: number;
 }

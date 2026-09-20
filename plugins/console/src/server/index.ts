@@ -15,6 +15,8 @@ import { migrations, type ConsoleTables } from './tables.js';
 
 export default definePlugin({
   id: CONSOLE_PLUGIN_ID,
+  // The console is how a server is managed at all.
+  essential: true,
   version: '0.1.0',
   apiVersion: PLUGIN_API_VERSION,
   // Chat uses tellraw and replies are rendered with § codes: Minecraft only for now.

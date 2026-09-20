@@ -52,6 +52,7 @@ import { FileAccess } from './files/access.js';
 import { SftpSessions } from './files/sftp.js';
 import { GameEventHub } from './game-events/hub.js';
 import { LogHub } from './logs/hub.js';
+import { ServerModules } from './modules/server-modules.js';
 import { PlayerTaskQueue } from './player-tasks/queue.js';
 import { registerSecurity } from './http/security.js';
 import { isClientRoute, registerWebUi } from './http/web-ui.js';
@@ -63,6 +64,7 @@ import { registerAuthRoutes } from './routes/auth.js';
 import { registerConnectionRoutes } from './routes/connection.js';
 import { registerExternalAuthRoutes } from './routes/external-auth.js';
 import { registerFilesRoutes } from './routes/files.js';
+import { registerModuleRoutes } from './routes/modules.js';
 import { registerInvitationRoutes } from './routes/invitations.js';
 import { registerMeRoutes } from './routes/me.js';
 import { registerServerRoutes } from './routes/servers.js';
@@ -112,6 +114,7 @@ export async function buildApp(
   let logs: LogHub | undefined;
   let gameEventHub: GameEventHub | undefined;
   let taskQueue: PlayerTaskQueue | undefined;
+  let moduleSettings: ServerModules | undefined;
   const sftpSessions = new SftpSessions();
   app.addHook('onClose', async () => {
     clearInterval(pruneTimer);
@@ -210,10 +213,15 @@ export async function buildApp(
       db,
       send: (serverId, command) => connectionManager.send(serverId, command),
       canTell: hasCapability(Capability.playersWhenOnline),
+      isEnabled: (pluginId, serverId) => moduleSettings?.isEnabled(serverId, pluginId) ?? true,
       onError: (err, context) => app.log.warn({ err, ...context }, 'a player task failed'),
     });
     taskQueue = playerTasks;
     const events = createEventBus(app.log);
+    const modules = new ServerModules(db, () => host?.list() ?? [], events);
+    moduleSettings = modules;
+    servers.modules = modules;
+    await modules.load();
     const plugins = new PluginHost(
       resolvePlugins(options.plugins ?? builtInPlugins, config.plugins),
       {
@@ -251,6 +259,7 @@ export async function buildApp(
           hasCapability(Capability.commandsSend),
         ),
         playerTasks: (pluginId, inSetup) => playerTasks.forPlugin(pluginId, inSetup),
+        modules,
         hasPermission: async (userId, serverId, permission) => {
           const user = await findUserById(db, userId);
           if (user === undefined || user.disabled_at !== null) return false;
@@ -258,9 +267,9 @@ export async function buildApp(
         },
         registerRoute: (pluginId, route) => registerPluginRoute(app, auth, pluginId, route),
         registerServerRoute: (pluginId, route, games) =>
-          registerServerPluginRoute(app, servers, pluginId, route, games),
+          registerServerPluginRoute(app, servers, modules, pluginId, route, games),
         registerServerEvents: (pluginId, stream, games) =>
-          registerServerPluginEvents(app, servers, pluginId, stream, games),
+          registerServerPluginEvents(app, servers, modules, pluginId, stream, games),
       },
     );
     host = plugins;
@@ -285,6 +294,7 @@ export async function buildApp(
     registerServerRoutes(app, auth, servers);
     registerConnectionRoutes(app, auth, servers, connectionManager);
     registerFilesRoutes(app, auth, servers, config.filesRoot, sftpSessions, logHub);
+    registerModuleRoutes(app, auth, servers, modules);
     registerAuditRoutes(app, auth, registry);
     await plugins.start();
 
@@ -372,6 +382,7 @@ function registerPluginRoute(
 function registerServerPluginRoute(
   app: FastifyInstance,
   servers: ServerService,
+  modules: ServerModules,
   pluginId: string,
   route: ServerRouteDefinition<ServerRouteSchema>,
   games: readonly string[] | null,
@@ -403,6 +414,9 @@ function registerServerPluginRoute(
           `${pluginId} does not support the game of this server`,
         );
       }
+      if (!modules.isEnabled(server.id, pluginId)) {
+        throw new HttpError(409, 'module_disabled', `${pluginId} is switched off for this server`);
+      }
       if (route.capability !== undefined && !server.capabilities.includes(route.capability)) {
         throw new HttpError(
           409,
@@ -433,6 +447,7 @@ const eventField = (value: string) => value.replace(/[\r\n]/g, '');
 function registerServerPluginEvents(
   app: FastifyInstance,
   servers: ServerService,
+  modules: ServerModules,
   pluginId: string,
   stream: ServerEventStreamDefinition,
   games: readonly string[] | null,
@@ -453,6 +468,9 @@ function registerServerPluginEvents(
           'game_not_supported',
           `${pluginId} does not support the game of this server`,
         );
+      }
+      if (!modules.isEnabled(server.id, pluginId)) {
+        throw new HttpError(409, 'module_disabled', `${pluginId} is switched off for this server`);
       }
       if (stream.capability !== undefined && !server.capabilities.includes(stream.capability)) {
         throw new HttpError(

@@ -254,4 +254,20 @@ export const coreMigrations: readonly Migration[] = [
         .execute();
     },
   },
+  {
+    // Modules switched off for a server; every module is on until an owner switches it off.
+    name: '0010_server_modules',
+    async up(db, { types }) {
+      await db.schema
+        .createTable('server_disabled_modules')
+        .addColumn('server_id', 'text', (column) =>
+          column.notNull().references('servers.id').onDelete('cascade'),
+        )
+        .addColumn('plugin_id', 'text', (column) => column.notNull())
+        .addColumn('disabled_by', 'text')
+        .addColumn('disabled_at', types.timestamp, (column) => column.notNull())
+        .addPrimaryKeyConstraint('server_disabled_modules_pk', ['server_id', 'plugin_id'])
+        .execute();
+    },
+  },
 ];

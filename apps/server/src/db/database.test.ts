@@ -21,6 +21,7 @@ describe.each(targets)('database ($name)', ({ url }) => {
     const tables = [
       'test_items',
       'player_tasks',
+      'server_disabled_modules',
       'invitations',
       'server_members',
       'servers',
@@ -58,6 +59,7 @@ describe.each(targets)('database ($name)', ({ url }) => {
       'outpost.core/0007_server_files',
       'outpost.core/0008_server_game',
       'outpost.core/0009_player_tasks',
+      'outpost.core/0010_server_modules',
     ]);
     expect(typeof rows[0]?.applied_at).toBe('number');
   });
