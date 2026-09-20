@@ -17,7 +17,7 @@ You need:
 ```yaml
 services:
   outpost:
-    image: ghcr.io/mobixon/outpost:0.4.0
+    image: ghcr.io/mobixon/outpost:0.5.0
     restart: unless-stopped
     ports:
       - '127.0.0.1:3000:3000' # for the reverse proxy on the same host

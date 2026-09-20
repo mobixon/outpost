@@ -60,9 +60,9 @@ two-factor login and an audit log.
   </tr>
 </table>
 
-> **Version 0.4** runs a real Minecraft server in production and adds events: timed competitions
-> with standings, chat commands and rewards. The [project plan](docs/PLAN.md) describes what comes
-> next.
+> **Version 0.5** runs a real Minecraft server in production and adds goals to events, any
+> statistic of the game as what an event counts, and presets. The
+> [project plan](docs/PLAN.md) describes what comes next.
 
 ## Install next to your server
 
@@ -82,7 +82,7 @@ services:
       - minecraft-data:/data
 
   outpost:
-    image: ghcr.io/mobixon/outpost:0.4.0
+    image: ghcr.io/mobixon/outpost:0.5.0
     restart: unless-stopped
     ports:
       - '127.0.0.1:3000:3000'
