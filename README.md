@@ -61,8 +61,8 @@ two-factor login and an audit log.
 </table>
 
 > **Version 0.5** runs a real Minecraft server in production and adds goals to events, any
-> statistic of the game as what an event counts, and presets. The
-> [project plan](docs/PLAN.md) describes what comes next.
+> statistic of the game as what an event counts, editing an event as JSON, and modules that can be
+> switched off per server. The [project plan](docs/PLAN.md) describes what comes next.
 
 ## Install next to your server
 
@@ -82,7 +82,7 @@ services:
       - minecraft-data:/data
 
   outpost:
-    image: ghcr.io/mobixon/outpost:0.5.0
+    image: ghcr.io/mobixon/outpost:0.5.2
     restart: unless-stopped
     ports:
       - '127.0.0.1:3000:3000'
