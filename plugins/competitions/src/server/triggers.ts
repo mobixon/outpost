@@ -127,9 +127,13 @@ export class Triggers {
     this.#asked.set(key, now);
     tidy(this.#asked, now, this.options.askCooldownMs);
     for (const row of events) {
-      const lines = renderTop(toEvent(row), await this.engine.standings(row), now, {
-        name: player,
-      });
+      const lines = renderTop(
+        toEvent(row),
+        await this.engine.standings(row),
+        now,
+        { name: player },
+        await this.engine.goalViewOf(row, player),
+      );
       if (lines.length > 0) await this.ctx.chat.tell(serverId, player, lines);
     }
   }
@@ -142,9 +146,13 @@ export class Triggers {
       if (now - (this.#welcomed.get(key) ?? 0) < JOIN_COOLDOWN_MS) continue;
       this.#welcomed.set(key, now);
       tidy(this.#welcomed, now, JOIN_COOLDOWN_MS);
-      const lines = renderJoin(toEvent(row), await this.engine.standings(row), now, {
-        name: player,
-      });
+      const lines = renderJoin(
+        toEvent(row),
+        await this.engine.standings(row),
+        now,
+        { name: player },
+        await this.engine.goalViewOf(row, player),
+      );
       if (lines.length > 0) await this.ctx.chat.tell(serverId, player, lines);
     }
   }

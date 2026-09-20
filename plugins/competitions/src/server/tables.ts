@@ -33,6 +33,30 @@ export interface CompetitionsTables {
     uuid: string;
     value: number;
   };
+  /** Goals: the counters of the players for each target at the start; missing is 0. */
+  comp_target_baselines: {
+    event_id: string;
+    uuid: string;
+    target: number;
+    value: number;
+  };
+  /** Goals: how far each player is on each target, at the last count. */
+  comp_progress: {
+    event_id: string;
+    uuid: string;
+    target: number;
+    name: string;
+    value: number;
+  };
+  /** Goals: who has reached all the targets, in order. */
+  comp_completions: {
+    event_id: string;
+    uuid: string;
+    name: string;
+    /** 1 for the first to reach them. */
+    place: number;
+    completed_at: number;
+  };
   /** The last count of the players who take part and have scored. */
   comp_scores: {
     event_id: string;
@@ -108,6 +132,44 @@ export const migrations: readonly Migration[] = [
     name: '0002_announcements',
     async up(db, { types }) {
       await db.schema.alterTable('comp_events').addColumn('announced', types.json).execute();
+    },
+  },
+  {
+    // Goals events: progress per target and who reached them all.
+    name: '0003_goals',
+    async up(db, { types }) {
+      await db.schema
+        .createTable('comp_target_baselines')
+        .addColumn('event_id', 'text', (column) =>
+          column.notNull().references('comp_events.id').onDelete('cascade'),
+        )
+        .addColumn('uuid', 'text', (column) => column.notNull())
+        .addColumn('target', 'integer', (column) => column.notNull())
+        .addColumn('value', 'integer', (column) => column.notNull())
+        .addPrimaryKeyConstraint('comp_target_baselines_pk', ['event_id', 'uuid', 'target'])
+        .execute();
+      await db.schema
+        .createTable('comp_progress')
+        .addColumn('event_id', 'text', (column) =>
+          column.notNull().references('comp_events.id').onDelete('cascade'),
+        )
+        .addColumn('uuid', 'text', (column) => column.notNull())
+        .addColumn('target', 'integer', (column) => column.notNull())
+        .addColumn('name', 'text', (column) => column.notNull())
+        .addColumn('value', 'integer', (column) => column.notNull())
+        .addPrimaryKeyConstraint('comp_progress_pk', ['event_id', 'uuid', 'target'])
+        .execute();
+      await db.schema
+        .createTable('comp_completions')
+        .addColumn('event_id', 'text', (column) =>
+          column.notNull().references('comp_events.id').onDelete('cascade'),
+        )
+        .addColumn('uuid', 'text', (column) => column.notNull())
+        .addColumn('name', 'text', (column) => column.notNull())
+        .addColumn('place', 'integer', (column) => column.notNull())
+        .addColumn('completed_at', types.timestamp, (column) => column.notNull())
+        .addPrimaryKeyConstraint('comp_completions_pk', ['event_id', 'uuid'])
+        .execute();
     },
   },
 ];

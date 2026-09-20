@@ -23,8 +23,53 @@ export default {
     },
     metric: {
       mined: 'Blocks mined',
+      stat: 'Another statistic',
+      goals: 'Goals',
       fish_caught: 'Fish caught',
-      presets: { wood: 'Wood', stone: 'Stone', ores: 'Ores', earth: 'Earth' },
+      statPresets: {
+        ore_drops: 'Ore drops',
+        crops: 'Crops',
+        hostile_mobs: 'Hostile mobs',
+        undead: 'Undead',
+        farm_animals: 'Farm animals',
+        bosses: 'Bosses',
+        mob_kills: 'All mob kills',
+        deaths: 'Deaths',
+        animals_bred: 'Animals bred',
+        villager_trades: 'Villager trades',
+        jumps: 'Jumps',
+        enchants: 'Items enchanted',
+      },
+      categories: {
+        picked_up: 'Items picked up',
+        killed: 'Mobs killed',
+        crafted: 'Items crafted',
+        used: 'Items used',
+        broken: 'Tools broken',
+        dropped: 'Items dropped',
+        killed_by: 'Killed by',
+        custom: 'Counters',
+      },
+      presets: {
+        wood: 'Wood',
+        stone: 'Stone',
+        ores: 'Ores',
+        earth: 'Earth',
+        cherry_grove: 'Cherry grove',
+        pale_garden: 'Pale garden',
+        mangrove_swamp: 'Mangrove swamp',
+        jungle: 'Jungle',
+        desert_badlands: 'Desert and badlands',
+        snowy: 'Snowy biomes',
+        mushroom_fields: 'Mushroom fields',
+        nether_forests: 'Nether forests',
+        nether_terrain: 'Nether terrain',
+        deep_dark: 'Deep dark',
+        caves: 'Lush and dripstone caves',
+        ocean: 'Ocean',
+        the_end: 'The End',
+        mountains: 'Mountains',
+      },
       other: '{count} more blocks',
     },
     actions: {
@@ -36,6 +81,11 @@ export default {
       delete: 'Delete',
     },
     detail: {
+      goalsInfo: 'Goals for everyone',
+      progress: 'Progress',
+      progressEmpty: 'Nobody has made progress yet.',
+      reachedAll: 'Reached all the goals: {count}',
+      doneAs: 'Done, number {place}',
       countNow: 'Count now',
       countNowTitle: 'Count the standings now?',
       countNowText:
@@ -96,6 +146,38 @@ export default {
       capability_missing: 'Connect the Files connector of this server first.',
     },
     form: {
+      mode: 'Kind of event',
+      modes: { ranking: 'Top of players', goals: 'Goals for everyone' },
+      modeHints: {
+        ranking:
+          'The players with the highest score win the places, and get the reward of their place.',
+        goals:
+          'Everyone who reaches all the goals gets the reward, once. Every goal counts something of its own.',
+      },
+      statCategory: 'Statistic',
+      categoryHints: {
+        picked_up:
+          'Items the player picked up: what dropped from mining and mobs, harvested crops. Ore drops such as raw copper cannot be farmed with silk touch; dropping an item and picking it up again still counts.',
+        killed: 'Mobs the player killed, by the id of the mob, such as minecraft:zombie.',
+        crafted:
+          'Items crafted. Crafting and un-crafting (ingots and blocks) can be repeated, so use it for expensive recipes.',
+        used: 'Items used: blocks placed, tools used, food eaten.',
+        broken: 'Tools that broke, that ran out of durability.',
+        dropped: 'Items the player dropped.',
+        killed_by:
+          'What killed the player, by the id of the mob or the damage, such as minecraft:creeper.',
+        custom:
+          'General counters of the game: minecraft:mob_kills, minecraft:deaths, minecraft:animals_bred, minecraft:jump and more.',
+      },
+      statIds: 'More ids',
+      statIdsHint:
+        'Ids of items or mobs, one per line or separated by commas. * stands for any part of a name: minecraft:raw_copper, *_ingot.',
+      targetLabel: 'Name of the goal',
+      targetAmount: 'Amount',
+      addTarget: 'Add a goal',
+      removeTarget: 'Remove',
+      goalsReward: 'Reward for everyone who reaches all the goals',
+      announceCompletions: 'Tell everyone when a player reaches all the goals',
       countEvery: 'Refresh the standings every',
       everyMinutes: '{count} min',
       countEveryHint:
@@ -157,6 +239,7 @@ export default {
       descriptionHint:
         'What the event is about, in your words. Shown where a text uses the description placeholder.',
       templates: {
+        completion: 'Message when a player reaches all the goals',
         top: 'Answer to the chat command',
         entry: 'One place in the top',
         join: 'Notice on joining',

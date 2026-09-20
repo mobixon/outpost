@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { eventInputSchema, type CompetitionEvent } from '../shared.js';
+import { eventInputSchema, type CompetitionEvent, type Metric } from '../shared.js';
 import {
   applyPeriod,
   changeTimezone,
   cloneForm,
   emptyForm,
+  emptyMetricForm,
+  metricFormOf,
   parseBlocks,
   parseCommands,
   problemsOf,
+  switchMode,
   toInput,
 } from './form.js';
 
@@ -50,9 +53,9 @@ describe('the competition form', () => {
     const form = emptyForm('UTC', NOW);
     expect(problemsOf(form)).toEqual(['name']);
     form.name = 'x';
-    form.presets = [];
+    form.metric.presets = [];
     expect(problemsOf(form)).toEqual(['metric']);
-    form.blocks = 'cherry_log, Minecraft:oak_log';
+    form.metric.blocks = 'cherry_log, Minecraft:oak_log';
     expect(problemsOf(form)).toEqual([]);
     form.end = form.start;
     expect(problemsOf(form)).toEqual(['period']);
@@ -97,14 +100,107 @@ describe('the competition form', () => {
   it('counts fish without asking for blocks, and keeps the blocks when switching back', () => {
     const form = emptyForm('UTC', NOW);
     form.name = 'Fishing week';
-    form.presets = [];
-    form.metric = 'fish_caught';
+    form.metric.presets = [];
+    form.metric.kind = 'fish_caught';
     expect(problemsOf(form)).toEqual([]);
     const input = toInput(form);
     expect(input?.metric).toEqual({ kind: 'fish_caught' });
     expect(eventInputSchema.safeParse(input).success).toBe(true);
-    form.metric = 'mined';
+    form.metric.kind = 'mined';
     expect(problemsOf(form)).toEqual(['metric']);
+  });
+
+  it('describes goals with a metric for every target, and takes a reward for everyone', () => {
+    const form = emptyForm('UTC', NOW);
+    form.name = 'Lumberjack';
+    switchMode(form, 'goals');
+    expect(form.messages.command).toBe('!goal');
+    expect(problemsOf(form)).toEqual(['targets']);
+    form.targets = [
+      {
+        label: 'Spruce logs',
+        metric: { ...emptyMetricForm(), presets: [], blocks: 'spruce_log' },
+        amount: 20,
+      },
+      {
+        label: 'Ore drops',
+        metric: {
+          ...emptyMetricForm(),
+          kind: 'stat',
+          category: 'picked_up',
+          statPresets: ['ore_drops', 'hostile_mobs'],
+        },
+        amount: 5,
+      },
+    ];
+    form.rewards[0] = 'give {player} diamond 1';
+    form.rewards[1] = 'say ignored: a goals event has one reward';
+    expect(problemsOf(form)).toEqual([]);
+    const input = toInput(form);
+    expect(input).toMatchObject({
+      scoring: {
+        kind: 'targets',
+        targets: [
+          {
+            label: 'Spruce logs',
+            metric: { kind: 'mined', blocks: ['minecraft:spruce_log'] },
+            amount: 20,
+          },
+          // Presets of another category than the one picked are left out.
+          {
+            label: 'Ore drops',
+            metric: { kind: 'stat', category: 'picked_up', presets: ['ore_drops'] },
+            amount: 5,
+          },
+        ],
+      },
+      rewards: { places: [{ place: 1, commands: ['give {player} diamond 1'] }] },
+    });
+    expect(input).not.toHaveProperty('metric');
+    expect(eventInputSchema.safeParse(input).success).toBe(true);
+
+    const first = form.targets[0];
+    if (first === undefined) throw new Error('No target');
+    first.amount = 0;
+    expect(problemsOf(form)).toEqual(['targets']);
+    first.amount = 20;
+    first.label = 'Bad {label}';
+    expect(problemsOf(form)).toEqual(['targets']);
+  });
+
+  it('keeps the texts that were changed when the kind of event changes', () => {
+    const form = emptyForm('UTC', NOW);
+    switchMode(form, 'goals');
+    expect(form.messages.top).toContain('{goals}');
+    switchMode(form, 'ranking');
+    expect(form.messages.command).toBe('!top');
+    form.messages.top = 'my own text {top}';
+    switchMode(form, 'goals');
+    expect(form.messages.top).toBe('my own text {top}');
+    expect(form.mode).toBe('goals');
+  });
+
+  it('counts another statistic, with the presets of its category', () => {
+    const form = emptyForm('UTC', NOW);
+    form.name = 'Hunt';
+    form.metric = {
+      ...emptyMetricForm(),
+      kind: 'stat',
+      category: 'killed',
+      statPresets: ['undead'],
+      ids: 'cow, *_golem',
+    };
+    expect(problemsOf(form)).toEqual([]);
+    expect(toInput(form)?.metric).toEqual({
+      kind: 'stat',
+      category: 'killed',
+      presets: ['undead'],
+      ids: ['minecraft:cow', 'minecraft:*_golem'],
+    });
+    form.metric.category = 'picked_up';
+    form.metric.ids = '';
+    expect(problemsOf(form)).toEqual(['metric']);
+    expect(metricFormOf(toInput(form)?.metric as Metric).category).toBe('picked_up');
   });
 
   it('reads blocks and commands from text', () => {

@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   formatDuration,
   formatInstant,
+  eventLabel,
+  goalView,
   metricLabel,
+  renderCompletion,
+  renderResults,
   renderAnnouncement,
   renderJoin,
   renderReward,
@@ -10,7 +14,7 @@ import {
   toLines,
   type RenderableEvent,
 } from './render.js';
-import { defaultMessages, type Standing } from './shared.js';
+import { defaultGoalMessages, defaultMessages, type Standing } from './shared.js';
 
 const NOW = Date.parse('2026-09-19T10:00:00Z');
 const event: RenderableEvent = {
@@ -19,6 +23,7 @@ const event: RenderableEvent = {
   endsAt: '2026-09-22T15:00:00Z',
   timezone: 'Europe/Moscow',
   metric: { kind: 'mined', presets: ['wood'], blocks: ['minecraft:cherry_log'] },
+  scoring: { kind: 'sum' },
   participants: { top: 2, excludeOperators: true, excluded: [] },
   messages: { ...defaultMessages(), description: '&7Cut the most trees!' },
 };
@@ -40,7 +45,7 @@ describe('rendering', () => {
 
   it('shows moments in the time zone of the competition', () => {
     expect(formatInstant(Date.parse('2026-09-28T15:00:00Z'), 'Europe/Moscow')).toContain('18:00');
-    expect(metricLabel(event.metric)).toBe('Mined: wood, 1 other');
+    expect(eventLabel(event)).toBe('Mined: wood, 1 other');
     expect(metricLabel({ kind: 'fish_caught' })).toBe('Fish caught');
   });
 
@@ -82,6 +87,83 @@ describe('rendering', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain('starts in 2h (');
     expect(lines[0]).toContain('ends in 3d 5h. !top &7Cut the most trees!');
+  });
+
+  it('describes what is counted, for every kind of metric and for goals', () => {
+    expect(
+      metricLabel({
+        kind: 'stat',
+        category: 'picked_up',
+        presets: ['ore_drops'],
+        ids: ['*_ingot'],
+      }),
+    ).toBe('Picked up: ore drops, 1 other');
+    expect(
+      metricLabel({ kind: 'stat', category: 'killed', presets: ['hostile_mobs'], ids: [] }),
+    ).toBe('Killed: hostile mobs');
+    expect(
+      eventLabel({
+        scoring: {
+          kind: 'targets',
+          targets: [
+            { label: 'Spruce', metric: { kind: 'fish_caught' }, amount: 1 },
+            { label: 'Fish', metric: { kind: 'fish_caught' }, amount: 1 },
+          ],
+        },
+      }),
+    ).toBe('Goals: Spruce, Fish');
+  });
+
+  it('shows the progress of a player in a goals event, and who reached the goals', () => {
+    const targets = [
+      { label: 'Spruce', metric: { kind: 'fish_caught' as const }, amount: 20 },
+      { label: 'Birch', metric: { kind: 'fish_caught' as const }, amount: 10 },
+    ];
+    const withoutMetric: RenderableEvent = { ...event };
+    delete withoutMetric.metric;
+    const goalsEvent: RenderableEvent = {
+      ...withoutMetric,
+      scoring: { kind: 'targets', targets },
+      messages: defaultGoalMessages(),
+    };
+    const view = goalView(
+      targets,
+      {
+        targets: [
+          { label: 'Spruce', value: 20, amount: 20 },
+          { label: 'Birch', value: 4, amount: 10 },
+        ],
+      },
+      2,
+    );
+    expect(view.lines).toEqual(['&a✓ &fSpruce &a20&7/20', '&7• &fBirch &e4&7/10']);
+    const lines = renderTop(
+      goalsEvent,
+      [{ place: 1, uuid: 'a', name: 'Steve', score: 2 }],
+      NOW,
+      { name: 'Alex' },
+      view,
+    );
+    expect(lines).toEqual(
+      [
+        '&6&lWood week&r &7- Goals: Spruce, Birch',
+        '&7Cut the most trees!',
+        '&a✓ &fSpruce &a20&7/20',
+        '&7• &fBirch &e4&7/10',
+        '&7Reached by &f2 &7players. Ends in &f3d 5h',
+      ].filter(
+        (line) => line !== '&7Cut the most trees!' || goalsEvent.messages.description !== '',
+      ),
+    );
+    expect(
+      renderResults(goalsEvent, [{ place: 1, uuid: 'a', name: 'Steve', score: 2 }], NOW, view),
+    ).toEqual(['&6&lWood week&r &7is over! Reached all the goals: &f2', '&e1. &fSteve']);
+    expect(renderResults(goalsEvent, [], NOW, goalView(targets, undefined, 0))).toContain(
+      '&7Nobody has reached them yet.',
+    );
+    expect(renderCompletion(goalsEvent, 'Steve', 3, 3)).toEqual([
+      '&6[Wood week] &fSteve &ahas reached all the goals!',
+    ]);
   });
 
   it('tells a winner about the reward', () => {
