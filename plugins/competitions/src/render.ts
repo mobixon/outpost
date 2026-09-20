@@ -56,7 +56,7 @@ export function toLines(text: string): string[] {
 /** What the texts of a competition are filled in from. */
 export type RenderableEvent = Pick<
   CompetitionEvent,
-  'name' | 'endsAt' | 'timezone' | 'metric' | 'messages' | 'participants'
+  'name' | 'startsAt' | 'endsAt' | 'timezone' | 'metric' | 'messages' | 'participants'
 >;
 
 export interface Viewer {
@@ -89,10 +89,14 @@ function values(
       ? undefined
       : standings.find((standing) => standing.name.toLowerCase() === viewer.name.toLowerCase());
   const ends = Date.parse(event.endsAt);
+  const starts = Date.parse(event.startsAt);
   return {
+    command: event.messages.command,
     event: event.name,
     description: event.messages.description,
     metric: metricLabel(event.metric),
+    starts_at: formatInstant(starts, event.timezone),
+    starts_in: formatDuration(starts - now),
     ends_at: formatInstant(ends, event.timezone),
     ends_in: formatDuration(ends - now),
     top: topLines(event.messages, standings, event.participants.top),
@@ -144,4 +148,14 @@ export function renderReward(
       score: formatScore(winner.score),
     }),
   );
+}
+
+/** What an announcement of the event says at its moment. */
+export function renderAnnouncement(
+  event: RenderableEvent,
+  text: string,
+  standings: readonly Standing[],
+  now: number,
+): string[] {
+  return toLines(renderTemplate(text, values(event, standings, now)));
 }

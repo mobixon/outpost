@@ -49,9 +49,10 @@ const events = ref<CompetitionEvent[] | null>(null);
 const message = ref<{ kind: 'info' | 'error'; text: string } | null>(null);
 const busy = ref(false);
 const selected = ref<string | null>(null);
-const editing = ref<{ open: boolean; event: CompetitionEvent | null }>({
+const editing = ref<{ open: boolean; event: CompetitionEvent | null; clone: boolean }>({
   open: false,
   event: null,
+  clone: false,
 });
 const cancelling = ref<CompetitionEvent | null>(null);
 const deleting = ref<CompetitionEvent | null>(null);
@@ -65,8 +66,8 @@ async function load(): Promise<void> {
   }
 }
 
-function openEditor(event: CompetitionEvent | null): void {
-  editing.value = { open: true, event };
+function openEditor(event: CompetitionEvent | null, clone = false): void {
+  editing.value = { open: true, event, clone };
 }
 
 async function saved(): Promise<void> {
@@ -146,6 +147,7 @@ onUnmounted(() => clearInterval(timer));
         :event-id="selected"
         @back="selected = null"
         @edit="openEditor(events?.find((entry) => entry.id === selected) ?? null)"
+        @clone="openEditor(events?.find((entry) => entry.id === selected) ?? null, true)"
       />
     </template>
 
@@ -206,6 +208,9 @@ onUnmounted(() => clearInterval(timer));
                   <DropdownMenuItem v-if="editable(event)" @select="openEditor(event)">
                     {{ t('competitions.actions.edit') }}
                   </DropdownMenuItem>
+                  <DropdownMenuItem @select="openEditor(event, true)">
+                    {{ t('competitions.actions.clone') }}
+                  </DropdownMenuItem>
                   <DropdownMenuItem v-if="editable(event)" @select="cancelling = event">
                     {{ t('competitions.actions.cancel') }}
                   </DropdownMenuItem>
@@ -224,7 +229,12 @@ onUnmounted(() => clearInterval(timer));
       </ul>
     </template>
 
-    <EventEditor v-model:open="editing.open" :event="editing.event" @saved="saved" />
+    <EventEditor
+      v-model:open="editing.open"
+      :event="editing.event"
+      :clone="editing.clone"
+      @saved="saved"
+    />
 
     <AlertDialog
       :open="cancelling !== null"

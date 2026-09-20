@@ -21,6 +21,8 @@ export interface CompetitionsTables {
     results: string | null;
     finished_at: number | null;
     problem: string | null;
+    /** JSON: the keys of the announcements that were sent (`start:10`); null when none. */
+    announced: string | null;
     created_by: string | null;
     created_at: number;
     updated_at: number;
@@ -99,6 +101,13 @@ export const migrations: readonly Migration[] = [
         .addColumn('changed_at', types.timestamp, (column) => column.notNull())
         .addPrimaryKeyConstraint('comp_scores_pk', ['event_id', 'uuid'])
         .execute();
+    },
+  },
+  {
+    // The announcements an event sends by itself: which of them went out.
+    name: '0002_announcements',
+    async up(db, { types }) {
+      await db.schema.alterTable('comp_events').addColumn('announced', types.json).execute();
     },
   },
 ];

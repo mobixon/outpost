@@ -5,6 +5,7 @@ import {
   type PlayerTask,
   type PluginContext,
 } from '@outpost/plugin-api';
+import { stripFormatting } from '@outpost/shared';
 import { z } from 'zod';
 import {
   candidateListSchema,
@@ -16,6 +17,8 @@ import {
   eventListSchema,
   eventSchema,
   REWARD_COMMAND_PERMISSION,
+  rewardTestInputSchema,
+  rewardTestResultSchema,
   type CompetitionEvent,
   type EventDetail,
   type RewardStatus,
@@ -29,7 +32,13 @@ import {
   type EventRow,
 } from './engine.js';
 import { PlayerDirectory } from './players.js';
-import { createRewardHandler, REWARD_KIND, rewardPayloadSchema } from './rewards.js';
+import {
+  commandFailure,
+  createRewardHandler,
+  REWARD_KIND,
+  rewardCommand,
+  rewardPayloadSchema,
+} from './rewards.js';
 import { Sampler } from './sampler.js';
 import { migrations, type CompetitionsTables } from './tables.js';
 import { DEFAULT_TRIGGER_OPTIONS, Triggers, type TriggerOptions } from './triggers.js';
@@ -68,6 +77,9 @@ const eventParams = z.object({ eventId: z.string() });
 const rewardParams = eventParams.extend({ taskId: z.string() });
 /** Competitions that are not over, at most this many per server. */
 const MAX_OPEN_EVENTS = 20;
+
+/** The UUID of a player Outpost does not know, for the tests of rewards. */
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -323,6 +335,29 @@ function setup(
 
   ctx.http.serverRoute({
     method: 'POST',
+    url: '/events/:eventId/count',
+    permission: CompetitionsPermission.manage,
+    capability: 'stats.read',
+    schema: { params: eventParams, response: eventDetailSchema },
+    handler: async ({ params, server, user, permissions, ip }) => {
+      const row = await rowOf(server.id, params.eventId);
+      if (row.state !== 'active') {
+        throw new HttpError(409, 'event_not_running', 'Only a running event can be counted now');
+      }
+      await engine.recount(row);
+      await ctx.audit.record({
+        action: 'event_recounted',
+        userId: user.id,
+        serverId: server.id,
+        target: row.name,
+        ip,
+      });
+      return detailOf(await rowOf(server.id, row.id), server, permissions);
+    },
+  });
+
+  ctx.http.serverRoute({
+    method: 'POST',
     url: '/events/:eventId/cancel',
     permission: CompetitionsPermission.manage,
     schema: { params: eventParams, response: eventSchema },
@@ -400,6 +435,45 @@ function setup(
       },
     });
   }
+
+  /** Runs the commands of a reward for a player who is online, to see that they work. */
+  ctx.http.serverRoute({
+    method: 'POST',
+    url: '/rewards/test',
+    permission: CompetitionsPermission.manage,
+    capability: 'commands.send',
+    schema: { body: rewardTestInputSchema, response: rewardTestResultSchema },
+    handler: async ({ body, server, user, permissions, ip }) => {
+      checkCommands(user, permissions, true, true);
+      const known = [...(await directory.names(server.id))].find(
+        ([, name]) => name.toLowerCase() === body.player.toLowerCase(),
+      );
+      const winner = { name: body.player, uuid: known?.[0] ?? NIL_UUID };
+      const results: { command: string; reply: string; ok: boolean }[] = [];
+      for (const command of body.commands) {
+        const text = rewardCommand(command, winner, {
+          eventName: body.eventName,
+          place: body.place,
+          score: 0,
+        });
+        const reply = await ctx.commands.send(server.id, text);
+        results.push({
+          command: text,
+          reply: stripFormatting(reply).trim().slice(0, 500),
+          ok: commandFailure(reply) === null,
+        });
+      }
+      await ctx.audit.record({
+        action: 'reward_tested',
+        userId: user.id,
+        serverId: server.id,
+        target: body.player,
+        details: { place: body.place, commands: results.map(({ command }) => command) },
+        ip,
+      });
+      return { results };
+    },
+  });
 
   ctx.http.serverRoute({
     method: 'GET',

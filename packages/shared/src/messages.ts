@@ -1,3 +1,5 @@
+import { utf8 } from './md5.js';
+
 // Chat messages to players: `&` color codes, `tellraw` commands and message templates.
 
 const COLORS: Record<string, { name: string; hex: string }> = {
@@ -75,6 +77,40 @@ export function tellrawCommand(target: string, message: string): string {
   );
   // The first element of a text array passes its style on to the others, so it stays empty.
   return `tellraw ${target} ${JSON.stringify(['', ...components])}`;
+}
+
+const byteLength = (text: string) => utf8(text).length;
+
+/**
+ * The `tellraw` commands that show several lines to the players `target` selects, as few as fit
+ * into `maxBytes` each: lines that fit together go into one command, so a message of several lines
+ * costs the server one command, not one per line. Throws a RangeError for a line that does not fit
+ * a command alone.
+ */
+export function tellrawLines(target: string, lines: readonly string[], maxBytes: number): string[] {
+  const componentsOf = (line: string) =>
+    parseMessage(line.replace(/[\r\n]+/g, ' ')).map(({ text, color, ...formats }) => ({
+      text,
+      ...(color && { color: color.name }),
+      ...formats,
+    }));
+  const commandOf = (parts: readonly object[]) =>
+    `tellraw ${target} ${JSON.stringify(['', ...parts])}`;
+  const commands: string[] = [];
+  let current: object[] = [];
+  for (const line of lines) {
+    const parts = componentsOf(line);
+    if (byteLength(commandOf(parts)) > maxBytes) throw new RangeError('A line is too long');
+    const joined = current.length === 0 ? parts : [...current, { text: '\n' }, ...parts];
+    if (current.length > 0 && byteLength(commandOf(joined)) > maxBytes) {
+      commands.push(commandOf(current));
+      current = parts;
+    } else {
+      current = joined;
+    }
+  }
+  if (current.length > 0) commands.push(commandOf(current));
+  return commands;
 }
 
 /** The `tellraw` command that shows an announcement to all players. */

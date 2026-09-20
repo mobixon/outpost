@@ -71,7 +71,7 @@ export function createRewardHandler(ctx: PluginContext) {
         { name: task.playerName, place: payload.place, score: payload.score },
       );
       try {
-        for (const line of lines) await ctx.chat.tell(task.serverId, task.playerName, line);
+        if (lines.length > 0) await ctx.chat.tell(task.serverId, task.playerName, lines);
       } catch (err) {
         // The reward is given; a message that did not arrive must not give it twice.
         ctx.logger.debug('telling the winner failed', { error: String(err) });

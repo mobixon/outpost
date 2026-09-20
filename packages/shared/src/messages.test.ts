@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { utf8 } from './md5.js';
 import {
   announcementCommand,
   parseMessage,
   renderTemplate,
   tellrawCommand,
+  tellrawLines,
   templatePlaceholders,
 } from './messages.js';
 
@@ -23,6 +25,26 @@ describe('messages', () => {
       '',
       { text: 'Red "quoted" ]} @a next', color: 'red' },
     ]);
+  });
+
+  it('put several lines into one command, and split them only when they do not fit', () => {
+    const [one, ...rest] = tellrawLines('Steve', ['&6a', 'b', '&cc'], 1446);
+    expect(rest).toEqual([]);
+    expect(JSON.parse((one ?? '').slice('tellraw Steve '.length))).toEqual([
+      '',
+      { text: 'a', color: 'gold' },
+      { text: '\n' },
+      { text: 'b' },
+      { text: '\n' },
+      { text: 'c', color: 'red' },
+    ]);
+    const long = 'x'.repeat(300);
+    const split = tellrawLines('@a', [long, long, long, long, long, 'end'], 1000);
+    expect(split.length).toBeGreaterThan(1);
+    for (const command of split) expect(utf8(command).length).toBeLessThanOrEqual(1000);
+    expect(split.join('')).toContain('end');
+    expect(() => tellrawLines('@a', ['x'.repeat(2000)], 1446)).toThrow(RangeError);
+    expect(tellrawLines('@a', [], 1446)).toEqual([]);
   });
 
   it('can go to one player', () => {

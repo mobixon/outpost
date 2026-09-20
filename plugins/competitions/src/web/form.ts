@@ -1,9 +1,14 @@
 import { instantToZoned, zonedToInstant } from '@outpost/shared';
 import {
+  DEFAULT_COUNT_MINUTES,
+  announcementKey,
+  defaultAnnouncements,
   defaultMessages,
   isValidBlockPattern,
+  MAX_NAME_LENGTH,
   MAX_TOP,
   normalizeBlockPattern,
+  type Announcement,
   type BlockPreset,
   type CompetitionEvent,
   type EventInput,
@@ -12,12 +17,17 @@ import {
   type PlayerRef,
 } from '../shared.js';
 
-/** Lengths to pick for a competition, in hours. */
+/** Lengths to pick for a competition, in minutes. */
 export const PERIODS = [
-  { key: 'twoDays', hours: 48 },
-  { key: 'week', hours: 168 },
-  { key: 'twoWeeks', hours: 336 },
+  { key: 'tenMinutes', minutes: 10 },
+  { key: 'thirtyMinutes', minutes: 30 },
+  { key: 'twoDays', minutes: 2 * 24 * 60 },
+  { key: 'week', minutes: 7 * 24 * 60 },
+  { key: 'twoWeeks', minutes: 14 * 24 * 60 },
 ] as const;
+
+/** How often the standings can be counted, in minutes. */
+export const COUNT_EVERY_CHOICES = [1, 2, 5, 10, 15, 30, 60] as const;
 
 /** What the editor keeps while it is open; times are what a clock in `timezone` shows. */
 export interface EditorForm {
@@ -37,9 +47,11 @@ export interface EditorForm {
   /** The commands of every place, one per line; index 0 is the first place. */
   rewards: string[];
   messages: Messages;
+  countEveryMinutes: number;
+  announcements: Announcement[];
 }
 
-const HOUR_MS = 60 * 60_000;
+const MINUTE_MS = 60_000;
 
 export function emptyForm(timezone: string, now = Date.now()): EditorForm {
   // The next full minute: a start in the past would begin at once anyway.
@@ -48,7 +60,7 @@ export function emptyForm(timezone: string, now = Date.now()): EditorForm {
     name: '',
     timezone,
     start: instantToZoned(start, timezone),
-    end: instantToZoned(start + PERIODS[1].hours * HOUR_MS, timezone),
+    end: instantToZoned(start + PERIODS[3].minutes * MINUTE_MS, timezone),
     metric: 'mined',
     presets: ['wood'],
     blocks: '',
@@ -57,6 +69,8 @@ export function emptyForm(timezone: string, now = Date.now()): EditorForm {
     excluded: [],
     rewards: Array.from({ length: MAX_TOP }, () => ''),
     messages: defaultMessages(),
+    countEveryMinutes: DEFAULT_COUNT_MINUTES,
+    announcements: defaultAnnouncements(),
   };
 }
 
@@ -78,7 +92,20 @@ export function fromEvent(event: CompetitionEvent): EditorForm {
     excluded: event.participants.excluded.map(({ uuid, name }) => ({ uuid, name })),
     rewards,
     messages: { ...event.messages },
+    countEveryMinutes: event.countEveryMinutes,
+    announcements: event.announcements.map((announcement) => ({ ...announcement })),
   };
+}
+
+/** The form of a new event that starts like an existing one, from the next minute on. */
+export function cloneForm(event: CompetitionEvent, now = Date.now()): EditorForm {
+  const form = fromEvent(event);
+  const length = Date.parse(event.endsAt) - Date.parse(event.startsAt);
+  const start = Math.ceil(now / MINUTE_MS) * MINUTE_MS;
+  form.name = `${event.name} (copy)`.slice(0, MAX_NAME_LENGTH);
+  form.start = instantToZoned(start, event.timezone);
+  form.end = instantToZoned(start + length, event.timezone);
+  return form;
 }
 
 /** Moves the times to another time zone without changing the moments they stand for. */
@@ -91,9 +118,9 @@ export function changeTimezone(form: EditorForm, timezone: string): void {
 }
 
 /** Ends the competition a period after its start. */
-export function applyPeriod(form: EditorForm, hours: number): void {
+export function applyPeriod(form: EditorForm, minutes: number): void {
   const start = zonedToInstant(form.start, form.timezone);
-  if (!Number.isNaN(start)) form.end = instantToZoned(start + hours * HOUR_MS, form.timezone);
+  if (!Number.isNaN(start)) form.end = instantToZoned(start + minutes * MINUTE_MS, form.timezone);
 }
 
 /** The block ids or patterns typed in, lowercase and with their namespace. */
@@ -122,6 +149,15 @@ export function problemsOf(form: EditorForm): string[] {
   const start = zonedToInstant(form.start, form.timezone);
   const end = zonedToInstant(form.end, form.timezone);
   if (Number.isNaN(start) || Number.isNaN(end) || end <= start) problems.push('period');
+  const moments = new Set<string>();
+  for (const announcement of form.announcements) {
+    const key = announcementKey(announcement);
+    if (announcement.text.trim() === '' || moments.has(key)) {
+      problems.push('announcements');
+      break;
+    }
+    moments.add(key);
+  }
   if (form.metric === 'mined') {
     const blocks = parseBlocks(form.blocks);
     if (form.presets.length === 0 && blocks.length === 0) problems.push('metric');
@@ -156,5 +192,10 @@ export function toInput(form: EditorForm): EventInput | null {
     },
     rewards: { places },
     messages: { ...form.messages, command: form.messages.command.trim() },
+    countEveryMinutes: form.countEveryMinutes,
+    announcements: form.announcements.map((announcement) => ({
+      ...announcement,
+      text: announcement.text.trim(),
+    })),
   };
 }

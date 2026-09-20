@@ -15,6 +15,12 @@ export const MAX_BLOCKS = 50;
 export const MAX_DURATION_DAYS = 366;
 /** Chat lines a message may have once its placeholders are filled in. */
 export const MAX_MESSAGE_LINES = 16;
+export const MAX_ANNOUNCEMENTS = 10;
+/** The longest a message can be sent before its moment (a week), in minutes. */
+export const MAX_ANNOUNCEMENT_MINUTES = 7 * 24 * 60;
+export const MIN_COUNT_MINUTES = 1;
+export const MAX_COUNT_MINUTES = 60;
+export const DEFAULT_COUNT_MINUTES = 5;
 
 export const EVENT_STATES = ['scheduled', 'active', 'finishing', 'finished', 'cancelled'] as const;
 export type EventState = (typeof EVENT_STATES)[number];
@@ -171,6 +177,7 @@ export const rewardsViewSchema = z.object({
 /** The placeholders each text of a competition may use. */
 export const PLACEHOLDERS = {
   top: [
+    'command',
     'event',
     'description',
     'metric',
@@ -182,6 +189,7 @@ export const PLACEHOLDERS = {
     'your_score',
   ],
   join: [
+    'command',
     'event',
     'description',
     'metric',
@@ -196,6 +204,17 @@ export const PLACEHOLDERS = {
   reward: ['event', 'player', 'place', 'score'],
   entry: ['place', 'name', 'score'],
   command: ['player', 'uuid', 'place', 'score', 'event'],
+  announce: [
+    'command',
+    'event',
+    'description',
+    'metric',
+    'starts_at',
+    'starts_in',
+    'ends_at',
+    'ends_in',
+    'top',
+  ],
 } as const;
 export type TemplateKind = keyof typeof PLACEHOLDERS;
 
@@ -237,6 +256,39 @@ export const messagesSchema = z.object({
 });
 export type Messages = z.infer<typeof messagesSchema>;
 
+/** A message the event sends to everyone by itself, at a time relative to its start or end. */
+export const announcementSchema = z.object({
+  anchor: z.enum(['start', 'end']),
+  /** How many minutes before the start or the end; 0 is at that moment. */
+  minutesBefore: z.number().int().min(0).max(MAX_ANNOUNCEMENT_MINUTES),
+  text: template('announce'),
+});
+export type Announcement = z.infer<typeof announcementSchema>;
+
+/** The key of an announcement in what has been sent: two of them never share a moment. */
+export const announcementKey = (announcement: Pick<Announcement, 'anchor' | 'minutesBefore'>) =>
+  `${announcement.anchor}:${announcement.minutesBefore}`;
+
+export function defaultAnnouncements(): Announcement[] {
+  return [
+    {
+      anchor: 'start',
+      minutesBefore: 10,
+      text: '&6&l{event}&r &7starts in &f{starts_in}&7! {description}',
+    },
+    {
+      anchor: 'start',
+      minutesBefore: 1,
+      text: '&6&l{event}&r &7starts in &f{starts_in}&7. Get ready!',
+    },
+    {
+      anchor: 'start',
+      minutesBefore: 0,
+      text: '&6&l{event}&r &7is on! It ends in &f{ends_in}&7. Type &f{command}&7 for the standings.',
+    },
+  ];
+}
+
 export function defaultMessages(): Messages {
   return {
     command: '!top',
@@ -252,7 +304,7 @@ export function defaultMessages(): Messages {
     join: [
       '&6&l{event}&r &7ends in &f{ends_in}',
       '{description}',
-      '&7Your place: &f{your_place} &7({your_score}). Type &f!top &7for the standings.',
+      '&7Your place: &f{your_place} &7({your_score}). Type &f{command} &7for the standings.',
     ].join('\n'),
     announceResults: true,
     results: ['&6&l{event}&r &7is over! The winners:', '{top}'].join('\n'),
@@ -294,6 +346,14 @@ const eventFields = z.object({
   participants: participantsSchema,
   rewards: rewardsSchema,
   messages: messagesSchema,
+  /** How often the standings of a running event are counted, in minutes. */
+  countEveryMinutes: z
+    .number()
+    .int()
+    .min(MIN_COUNT_MINUTES)
+    .max(MAX_COUNT_MINUTES)
+    .default(DEFAULT_COUNT_MINUTES),
+  announcements: z.array(announcementSchema).max(MAX_ANNOUNCEMENTS).default([]),
 });
 
 /** What is stored of a competition besides its name and times. */
@@ -303,6 +363,8 @@ export const eventConfigSchema = eventFields.pick({
   participants: true,
   rewards: true,
   messages: true,
+  countEveryMinutes: true,
+  announcements: true,
 });
 export type EventConfig = z.output<typeof eventConfigSchema>;
 
@@ -325,6 +387,18 @@ export const eventInputSchema = eventFields.superRefine((event, context) => {
   if (!metricIsComplete(event.metric)) {
     context.addIssue({ code: 'custom', path: ['metric'], message: 'Pick what is counted' });
   }
+  const moments = new Set<string>();
+  event.announcements.forEach((announcement, index) => {
+    const key = announcementKey(announcement);
+    if (moments.has(key)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['announcements', index, 'minutesBefore'],
+        message: 'Two messages cannot go out at the same moment',
+      });
+    }
+    moments.add(key);
+  });
   const places = new Set<number>();
   event.rewards.places.forEach((reward, index) => {
     if (reward.place > event.participants.top || places.has(reward.place)) {
@@ -371,6 +445,8 @@ export const eventSchema = z.object({
   participants: participantsSchema,
   rewards: rewardsViewSchema,
   messages: messagesSchema,
+  countEveryMinutes: z.number().int(),
+  announcements: z.array(announcementSchema),
   /** When the counters at the start were taken; later than `startsAt` when Outpost was late. */
   baselineAt: z.string().nullable(),
   finishedAt: z.string().nullable(),
@@ -420,3 +496,24 @@ export const candidateListSchema = z.object({
 export type CandidateList = z.infer<typeof candidateListSchema>;
 
 export const isPlayerName = (name: string) => PLAYER_NAME_PATTERN.test(name);
+
+export const rewardTestInputSchema = z.object({
+  /** A player who is online; the commands run for them. */
+  player: z.string().trim().regex(PLAYER_NAME_PATTERN),
+  eventName: z.string().trim().min(1).max(MAX_NAME_LENGTH),
+  place: z.number().int().min(1).max(MAX_TOP),
+  commands: z.array(commandSchema).min(1).max(MAX_COMMANDS_PER_PLACE),
+});
+export type RewardTestInput = z.input<typeof rewardTestInputSchema>;
+
+export const rewardTestResultSchema = z.object({
+  results: z.array(
+    z.object({
+      command: z.string(),
+      /** What the server answered. */
+      reply: z.string(),
+      ok: z.boolean(),
+    }),
+  ),
+});
+export type RewardTestResult = z.infer<typeof rewardTestResultSchema>;

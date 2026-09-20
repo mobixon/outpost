@@ -1,5 +1,5 @@
 import { HttpError, type PluginContext } from '@outpost/plugin-api';
-import { PLAYER_NAME_PATTERN, tellrawCommand } from '@outpost/shared';
+import { PLAYER_NAME_PATTERN, tellrawLines } from '@outpost/shared';
 
 /** Minecraft reads RCON requests with at most 1446 bytes of command. */
 const MAX_COMMAND_BYTES = 1446;
@@ -9,15 +9,28 @@ export function createChat(
   send: (serverId: string, command: string) => Promise<string>,
   hasCapability: (serverId: string) => Promise<boolean>,
 ): PluginContext['chat'] {
-  async function run(serverId: string, target: string, message: string): Promise<void> {
+  async function run(
+    serverId: string,
+    target: string,
+    message: string | readonly string[],
+  ): Promise<void> {
     if (!(await hasCapability(serverId))) {
       throw new HttpError(409, 'capability_missing', 'The server cannot send chat messages');
     }
-    const command = tellrawCommand(target, message);
-    if (new TextEncoder().encode(command).length > MAX_COMMAND_BYTES) {
-      throw new HttpError(400, 'message_too_long', 'The message is too long');
+    let commands: string[];
+    try {
+      commands = tellrawLines(
+        target,
+        typeof message === 'string' ? [message] : message,
+        MAX_COMMAND_BYTES,
+      );
+    } catch (err) {
+      if (err instanceof RangeError) {
+        throw new HttpError(400, 'message_too_long', 'The message is too long');
+      }
+      throw err;
     }
-    await send(serverId, command);
+    for (const command of commands) await send(serverId, command);
   }
   return {
     tell: async (serverId, player, message) => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   blockMatcher,
+  defaultAnnouncements,
   defaultMessages,
   eventInputSchema,
   metricPatterns,
@@ -93,6 +94,33 @@ describe('the event input', () => {
       'messages.command',
       'messages.join',
     ]);
+  });
+
+  it('accepts the default announcements, and only one message per moment', () => {
+    expect(problems({ ...input(), announcements: defaultAnnouncements() })).toEqual([]);
+    const twice = [
+      { anchor: 'end' as const, minutesBefore: 5, text: 'a' },
+      { anchor: 'end' as const, minutesBefore: 5, text: 'b' },
+    ];
+    expect(problems({ ...input(), announcements: twice })).toEqual([
+      'announcements.1.minutesBefore',
+    ]);
+    expect(
+      problems({
+        ...input(),
+        announcements: [{ anchor: 'start', minutesBefore: 1, text: 'hi {nope}' }],
+      }),
+    ).toEqual(['announcements.0.text']);
+    expect(
+      problems({ ...input(), announcements: [{ anchor: 'start', minutesBefore: -1, text: 'x' }] }),
+    ).toEqual(['announcements.0.minutesBefore']);
+  });
+
+  it('counts every 1 to 60 minutes, 5 by default', () => {
+    expect(eventInputSchema.parse(input()).countEveryMinutes).toBe(5);
+    expect(problems({ ...input(), countEveryMinutes: 0 })).toEqual(['countEveryMinutes']);
+    expect(problems({ ...input(), countEveryMinutes: 61 })).toEqual(['countEveryMinutes']);
+    expect(problems({ ...input(), countEveryMinutes: 1 })).toEqual([]);
   });
 
   it('keeps the name on one line', () => {

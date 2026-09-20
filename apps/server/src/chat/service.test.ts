@@ -24,6 +24,16 @@ describe('chat', () => {
     ]);
   });
 
+  it('sends several lines as one command', async () => {
+    const { chat, sent } = setUp();
+    await chat.tell('s1', 'Steve', ['one', '&aTwo', 'three']);
+    expect(sent).toEqual([
+      'tellraw Steve ["",{"text":"one"},{"text":"\\n"},{"text":"Two","color":"green"},{"text":"\\n"},{"text":"three"}]',
+    ]);
+    await chat.broadcast('s1', []);
+    expect(sent).toHaveLength(1);
+  });
+
   it('does not let a name or a message change the command', async () => {
     const { chat, sent } = setUp();
     await expect(chat.tell('s1', 'Steve @a', 'x')).rejects.toMatchObject({

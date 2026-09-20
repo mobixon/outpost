@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import { ArrowLeftIcon, CircleAlertIcon, PencilIcon } from '@lucide/vue';
+import { ArrowLeftIcon, CircleAlertIcon, CopyIcon, PencilIcon, RefreshCwIcon } from '@lucide/vue';
 import { parseMessage, serverPluginApiPath } from '@outpost/shared';
 import {
   Alert,
   AlertDescription,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   Badge,
   Button,
   Card,
@@ -37,7 +45,7 @@ const REFRESH_MS = 15_000;
 const LATE_START_MS = 2 * 60_000;
 
 const props = defineProps<{ eventId: string }>();
-const emit = defineEmits<{ back: []; edit: []; loaded: [] }>();
+const emit = defineEmits<{ back: []; edit: []; clone: []; loaded: [] }>();
 
 const { t, te, locale } = useI18n();
 const { server } = useServerContext();
@@ -47,6 +55,7 @@ const canManage = computed(() => can(CompetitionsPermission.manage));
 const canRewards = computed(() => can(CompetitionsPermission.rewards));
 
 const detail = ref<EventDetail | null>(null);
+const confirmingCount = ref(false);
 const error = ref<string | null>(null);
 const busy = ref(false);
 
@@ -73,7 +82,31 @@ async function reward(status: RewardStatus, action: 'retry' | 'cancel'): Promise
   }
 }
 
+/** Counts the standings now; the server saves the world first. */
+async function countNow(): Promise<void> {
+  confirmingCount.value = false;
+  if (busy.value) return;
+  busy.value = true;
+  try {
+    detail.value = await apiSend(
+      'POST',
+      url(`/events/${props.eventId}/count`),
+      {},
+      eventDetailSchema,
+    );
+    error.value = null;
+  } catch (err) {
+    error.value = describe(err, t, te);
+  } finally {
+    busy.value = false;
+  }
+}
+
 const event = computed(() => detail.value?.event ?? null);
+const countable = computed(
+  () =>
+    canManage.value && event.value?.state === 'active' && detail.value?.capabilities.stats === true,
+);
 const editable = computed(
   () => canManage.value && (event.value?.state === 'scheduled' || event.value?.state === 'active'),
 );
@@ -131,6 +164,20 @@ defineExpose({ reload: load });
         {{ t('competitions.back') }}
       </Button>
       <div class="flex-1" />
+      <Button
+        v-if="countable"
+        variant="outline"
+        size="sm"
+        :disabled="busy"
+        @click="confirmingCount = true"
+      >
+        <RefreshCwIcon />
+        {{ t('competitions.detail.countNow') }}
+      </Button>
+      <Button v-if="canManage && event" variant="outline" size="sm" @click="emit('clone')">
+        <CopyIcon />
+        {{ t('competitions.actions.clone') }}
+      </Button>
       <Button v-if="editable" variant="outline" size="sm" @click="emit('edit')">
         <PencilIcon />
         {{ t('competitions.actions.edit') }}
@@ -298,5 +345,25 @@ defineExpose({ reload: load });
         </CardContent>
       </Card>
     </template>
+
+    <AlertDialog
+      :open="confirmingCount"
+      @update:open="(value: boolean) => (confirmingCount = value)"
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{{ t('competitions.detail.countNowTitle') }}</AlertDialogTitle>
+          <AlertDialogDescription>{{
+            t('competitions.detail.countNowText')
+          }}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{{ t('competitions.form.cancel') }}</AlertDialogCancel>
+          <AlertDialogAction :disabled="busy" @click="countNow">
+            {{ t('competitions.detail.countNowConfirm') }}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>
