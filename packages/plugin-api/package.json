@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@outpost/shared": "workspace:*",
-    "kysely": "^0.29.5",
+    "kysely": "^0.29.6",
     "zod": "^4.6.2"
   }
 }
