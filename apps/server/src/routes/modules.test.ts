@@ -22,6 +22,23 @@ const greeter = definePlugin({
     });
   },
 });
+// A module that is off until an owner switches it on.
+const optIn = definePlugin({
+  id: 'test.opt-in',
+  version: '1.0.0',
+  apiVersion: PLUGIN_API_VERSION,
+  games: ['minecraft-java'],
+  defaultEnabled: false,
+  permissions: [{ key: 'optin.use', roles: ['owner', 'admin', 'moderator', 'viewer'] }],
+  setup(ctx) {
+    ctx.http.serverRoute({
+      method: 'GET',
+      url: '/hello',
+      permission: 'optin.use',
+      handler: () => ({ hello: 'opt-in' }),
+    });
+  },
+});
 const global = definePlugin({
   id: 'test.global',
   version: '1.0.0',
@@ -48,7 +65,7 @@ afterEach(async () => {
 async function setUp() {
   app = await startTestApp({
     env: { OUTPOST_REQUIRE_2FA_FOR_ADMINS: 'false' },
-    plugins: [consolePlugin, greeter, global, createPlayersPlugin({ pollIntervalMs: 50 })],
+    plugins: [consolePlugin, greeter, optIn, global, createPlayersPlugin({ pollIntervalMs: 50 })],
   });
   const server = app;
   const admin = await setUpAdmin(server);
@@ -79,6 +96,7 @@ describe('the modules of a server', () => {
       modules: [
         { id: 'outpost.console', version: expect.any(String), essential: true, enabled: true },
         { id: 'test.greeter', version: '1.0.0', essential: false, enabled: true },
+        { id: 'test.opt-in', version: '1.0.0', essential: false, enabled: false },
         { id: 'outpost.players', version: expect.any(String), essential: false, enabled: true },
       ],
     });
@@ -89,6 +107,26 @@ describe('the modules of a server', () => {
     expect((await setModule('nope', false)).statusCode).toBe(404);
   });
 
+  it('can be off until an owner switches them on', async () => {
+    const { server, owner, base, setModule } = await setUp();
+    const url = `${base}/plugins/test.opt-in/hello`;
+    // A new server has the module off: no tab, no answer.
+    expect((await get(server, base, owner.cookie)).json()).toMatchObject({
+      disabledModules: ['test.opt-in'],
+    });
+    const off = await get(server, url, owner.cookie);
+    expect(off.statusCode).toBe(409);
+    expect(off.json()).toMatchObject({ error: { code: 'module_disabled' } });
+
+    expect((await setModule('test.opt-in', true)).json()).toMatchObject({ enabled: true });
+    expect((await get(server, base, owner.cookie)).json()).toMatchObject({ disabledModules: [] });
+    expect((await get(server, url, owner.cookie)).json()).toEqual({ hello: 'opt-in' });
+
+    // Switched off again, it is off by choice.
+    await setModule('test.opt-in', false);
+    expect((await get(server, url, owner.cookie)).statusCode).toBe(409);
+  });
+
   it('are switched on and off by the owners of the server, and the change is audited', async () => {
     const { server, admin, owner, moderator, base, serverId, setModule } = await setUp();
     expect((await setModule('test.greeter', false, moderator.cookie)).statusCode).toBe(403);
@@ -96,12 +134,12 @@ describe('the modules of a server', () => {
     const off = await setModule('test.greeter', false);
     expect(off.json()).toMatchObject({ id: 'test.greeter', enabled: false });
     const summary = (await get(server, base, owner.cookie)).json<{ disabledModules: string[] }>();
-    expect(summary.disabledModules).toEqual(['test.greeter']);
+    expect(summary.disabledModules).toEqual(['test.greeter', 'test.opt-in']);
     // Everyone sees which are off; the list of modules says it too.
     expect(
       (await get(server, base, moderator.cookie)).json<{ disabledModules: string[] }>()
         .disabledModules,
-    ).toEqual(['test.greeter']);
+    ).toEqual(['test.greeter', 'test.opt-in']);
     expect(
       (await get(server, `${base}/modules`, moderator.cookie))
         .json<{ modules: { id: string; enabled: boolean }[] }>()
@@ -110,7 +148,9 @@ describe('the modules of a server', () => {
 
     const on = await setModule('test.greeter', true);
     expect(on.json()).toMatchObject({ enabled: true });
-    expect((await get(server, base, owner.cookie)).json()).toMatchObject({ disabledModules: [] });
+    expect((await get(server, base, owner.cookie)).json()).toMatchObject({
+      disabledModules: ['test.opt-in'],
+    });
 
     const audit = await get(server, `/api/v1/servers/${serverId}/audit`, owner.cookie);
     const actions = audit.json<{ entries: { action: string; target: string | null }[] }>().entries;

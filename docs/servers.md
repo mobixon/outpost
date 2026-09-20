@@ -21,7 +21,10 @@ its entries.
 ## Modules of a server
 
 Every module is on for every server until an owner switches it off under **Settings → Modules**
-(superadmins can too). A module that is off does not show its tab, does not answer its routes
+(superadmins can too), except the modules that are **off by default**, which an owner switches on
+where they are wanted: at present the **Events** module, which follows the log and counts statistics
+while an event runs. A server added on a new install has Events off, and its tab appears when it is
+switched on; the servers that already exist when Outpost is updated to this version keep Events on. A module that is off does not show its tab, does not answer its routes
 (`409 module_disabled`) and, above all, is not asked to look at the game server: the Players module
 stops asking who is online every 15 seconds, the Scheduler runs nothing, an event of the Events
 module waits as it is and stops following the log, and the rewards and tasks of the module wait for
@@ -419,7 +422,7 @@ stores. The web part of a plugin adds a tab to the server page with `serverTabs`
 with the tab's permission.
 
 A plugin with `games` is a module of servers, which owners can switch off for a server, unless it
-sets `essential: true`; a plugin without `games` is not tied to servers. `ctx.servers.supports(server)`
+sets `essential: true`, and which is off for a new server when it sets `defaultEnabled: false`; a plugin without `games` is not tied to servers. `ctx.servers.supports(server)`
 is false for a server where the plugin is off, and `ctx.servers.enabledFor(serverId)` tells it
 without the server; a background job must check one of them for every server before it touches it,
 and listen to the event `outpost.module.changed` (`{ serverId, pluginId, enabled }`) if it keeps

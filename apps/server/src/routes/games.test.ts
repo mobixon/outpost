@@ -90,8 +90,20 @@ describe('the game of a server', () => {
 
     expect((await get(server, '/api/v1/plugins', admin)).json()).toEqual({
       plugins: [
-        { id: 'test.rust', version: '1.0.0', games: ['rust'], essential: false },
-        { id: 'test.any', version: '1.0.0', games: null, essential: false },
+        {
+          id: 'test.rust',
+          version: '1.0.0',
+          games: ['rust'],
+          essential: false,
+          defaultEnabled: true,
+        },
+        {
+          id: 'test.any',
+          version: '1.0.0',
+          games: null,
+          essential: false,
+          defaultEnabled: true,
+        },
       ],
     });
     expect(

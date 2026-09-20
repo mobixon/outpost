@@ -59,6 +59,8 @@ export function createCompetitionsPlugin(options: CompetitionsPluginOptions = {}
     apiVersion: PLUGIN_API_VERSION,
     // Counters, chat messages and rewards are those of Minecraft.
     games: ['minecraft-java'],
+    // It follows the log and counts statistics while an event runs: an owner switches it on.
+    defaultEnabled: false,
     dependsOn: ['outpost.players?'],
     files: { read: ['usercache.json', 'ops.json'] },
     migrations,

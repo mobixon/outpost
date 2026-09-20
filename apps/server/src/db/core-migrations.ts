@@ -270,4 +270,35 @@ export const coreMigrations: readonly Migration[] = [
         .execute();
     },
   },
+  {
+    // A module can be off by default, so what an owner chose is kept both ways. What was switched
+    // off is copied; the servers that exist keep the Events module, which was on for everyone before
+    // it became opt-in.
+    name: '0011_server_modules_state',
+    async up(db, { types }) {
+      await db.schema
+        .createTable('server_modules')
+        .addColumn('server_id', 'text', (column) =>
+          column.notNull().references('servers.id').onDelete('cascade'),
+        )
+        .addColumn('plugin_id', 'text', (column) => column.notNull())
+        .addColumn('enabled', types.boolean, (column) => column.notNull())
+        .addColumn('changed_by', 'text')
+        .addColumn('changed_at', types.timestamp, (column) => column.notNull())
+        .addPrimaryKeyConstraint('server_modules_pk', ['server_id', 'plugin_id'])
+        .execute();
+      await sql`insert into server_modules (server_id, plugin_id, enabled, changed_by, changed_at)
+        select server_id, plugin_id, 0, disabled_by, disabled_at from server_disabled_modules`.execute(
+        db,
+      );
+      await db.schema.dropTable('server_disabled_modules').execute();
+      await sql`insert into server_modules (server_id, plugin_id, enabled, changed_by, changed_at)
+        select id, 'outpost.competitions', 1, null, ${Date.now()} from servers
+        where not exists (
+          select 1 from server_modules
+          where server_modules.server_id = servers.id
+            and server_modules.plugin_id = 'outpost.competitions'
+        )`.execute(db);
+    },
+  },
 ];

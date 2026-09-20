@@ -116,6 +116,17 @@ async function setUp() {
     }),
   ];
   expect(connected.map((response) => response.statusCode)).toEqual([204, 204]);
+  // The Events module is off for a new server until an owner switches it on.
+  const enabled = await send(
+    server,
+    'PUT',
+    `/api/v1/servers/${serverId}/modules/outpost.competitions`,
+    {
+      cookie: owner.cookie,
+      body: { enabled: true },
+    },
+  );
+  expect(enabled.statusCode).toBe(200);
   const url = `/api/v1/servers/${serverId}/plugins/outpost.competitions`;
   return { server, admin, owner, viewer, serverId, url };
 }
