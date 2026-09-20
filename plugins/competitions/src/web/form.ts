@@ -3,11 +3,13 @@ import {
   DEFAULT_COUNT_MINUTES,
   announcementKey,
   defaultAnnouncements,
+  defaultGoalMessages,
   defaultMessages,
   isValidBlockPattern,
   MAX_NAME_LENGTH,
   MAX_TOP,
   normalizeBlockPattern,
+  statPresetsOf,
   type Announcement,
   type BlockPreset,
   type CompetitionEvent,
@@ -15,6 +17,8 @@ import {
   type Messages,
   type Metric,
   type PlayerRef,
+  type StatCategory,
+  type StatPreset,
 } from '../shared.js';
 
 /** Lengths to pick for a competition, in minutes. */
@@ -29,6 +33,25 @@ export const PERIODS = [
 /** How often the standings can be counted, in minutes. */
 export const COUNT_EVERY_CHOICES = [1, 2, 5, 10, 15, 30, 60] as const;
 
+/** What is counted, as the editor keeps it: the choices for every kind stay while it is open. */
+export interface MetricForm {
+  kind: Metric['kind'];
+  presets: BlockPreset[];
+  /** One block id or pattern per line or comma. */
+  blocks: string;
+  category: StatCategory;
+  statPresets: StatPreset[];
+  /** One id or pattern per line or comma. */
+  ids: string;
+}
+
+/** One goal: reach an amount of a counter. */
+export interface TargetForm {
+  label: string;
+  metric: MetricForm;
+  amount: number;
+}
+
 /** What the editor keeps while it is open; times are what a clock in `timezone` shows. */
 export interface EditorForm {
   name: string;
@@ -36,19 +59,79 @@ export interface EditorForm {
   /** `2026-09-28T18:00` */
   start: string;
   end: string;
-  /** What is counted. */
-  metric: Metric['kind'];
-  presets: BlockPreset[];
-  /** One block id or pattern per line or comma. */
-  blocks: string;
+  /** A top of players, or goals for everyone. */
+  mode: 'ranking' | 'goals';
+  /** What a top counts. */
+  metric: MetricForm;
+  /** What the goals ask for. */
+  targets: TargetForm[];
   top: number;
   excludeOperators: boolean;
   excluded: PlayerRef[];
-  /** The commands of every place, one per line; index 0 is the first place. */
+  /** The commands of every place, one per line; index 0 is the first place, or all goals. */
   rewards: string[];
   messages: Messages;
   countEveryMinutes: number;
   announcements: Announcement[];
+}
+
+export function emptyMetricForm(): MetricForm {
+  return {
+    kind: 'mined',
+    presets: ['wood'],
+    blocks: '',
+    category: 'picked_up',
+    statPresets: [],
+    ids: '',
+  };
+}
+
+export function emptyTarget(): TargetForm {
+  return { label: '', metric: { ...emptyMetricForm(), presets: [] }, amount: 20 };
+}
+
+/** The form of a metric that was saved. */
+export function metricFormOf(metric: Metric | undefined): MetricForm {
+  const form = emptyMetricForm();
+  if (metric === undefined) return form;
+  form.kind = metric.kind;
+  if (metric.kind === 'mined') {
+    form.presets = [...metric.presets];
+    form.blocks = metric.blocks.join('\n');
+  } else if (metric.kind === 'stat') {
+    form.category = metric.category;
+    form.statPresets = [...metric.presets];
+    form.ids = metric.ids.join('\n');
+  } else {
+    form.presets = [];
+  }
+  return form;
+}
+
+/** The metric the form describes. */
+export function toMetric(form: MetricForm): Metric {
+  if (form.kind === 'fish_caught') return { kind: 'fish_caught' };
+  if (form.kind === 'stat') {
+    return {
+      kind: 'stat',
+      category: form.category,
+      // Presets of another category are left over from a category picked before.
+      presets: form.statPresets.filter((preset) => statPresetsOf(form.category).includes(preset)),
+      ids: parseBlocks(form.ids),
+    };
+  }
+  return { kind: 'mined', presets: form.presets, blocks: parseBlocks(form.blocks) };
+}
+
+/** Whether a metric of the form says what it counts, with ids that can be ids. */
+export function metricFormProblems(form: MetricForm): ('metric' | 'blocks')[] {
+  const metric = toMetric(form);
+  if (metric.kind === 'fish_caught') return [];
+  const ids = metric.kind === 'mined' ? metric.blocks : metric.ids;
+  const problems: ('metric' | 'blocks')[] = [];
+  if (metric.presets.length === 0 && ids.length === 0) problems.push('metric');
+  if (!ids.every(isValidBlockPattern)) problems.push('blocks');
+  return problems;
 }
 
 const MINUTE_MS = 60_000;
@@ -61,9 +144,9 @@ export function emptyForm(timezone: string, now = Date.now()): EditorForm {
     timezone,
     start: instantToZoned(start, timezone),
     end: instantToZoned(start + PERIODS[3].minutes * MINUTE_MS, timezone),
-    metric: 'mined',
-    presets: ['wood'],
-    blocks: '',
+    mode: 'ranking',
+    metric: emptyMetricForm(),
+    targets: [emptyTarget()],
     top: 3,
     excludeOperators: true,
     excluded: [],
@@ -79,14 +162,22 @@ export function fromEvent(event: CompetitionEvent): EditorForm {
   for (const reward of event.rewards.places) {
     rewards[reward.place - 1] = reward.commands.join('\n');
   }
+  const goals = event.scoring.kind === 'targets';
   return {
     name: event.name,
     timezone: event.timezone,
     start: instantToZoned(Date.parse(event.startsAt), event.timezone),
     end: instantToZoned(Date.parse(event.endsAt), event.timezone),
-    metric: event.metric.kind,
-    presets: event.metric.kind === 'mined' ? [...event.metric.presets] : ['wood'],
-    blocks: event.metric.kind === 'mined' ? event.metric.blocks.join('\n') : '',
+    mode: goals ? 'goals' : 'ranking',
+    metric: metricFormOf(event.metric),
+    targets:
+      event.scoring.kind === 'targets'
+        ? event.scoring.targets.map((target) => ({
+            label: target.label,
+            metric: metricFormOf(target.metric),
+            amount: target.amount,
+          }))
+        : [emptyTarget()],
     top: event.participants.top,
     excludeOperators: event.participants.excludeOperators,
     excluded: event.participants.excluded.map(({ uuid, name }) => ({ uuid, name })),
@@ -142,6 +233,23 @@ export function parseCommands(text: string): string[] {
     .filter((line) => line !== '');
 }
 
+/**
+ * Changes between a top and goals. The texts follow, unless they were changed: a goals event asks
+ * `!goal` and shows progress, a top asks `!top` and shows places.
+ */
+export function switchMode(form: EditorForm, mode: EditorForm['mode']): void {
+  if (form.mode === mode) return;
+  const of = (kind: EditorForm['mode']) =>
+    JSON.stringify({
+      ...(kind === 'goals' ? defaultGoalMessages() : defaultMessages()),
+      description: form.messages.description,
+    });
+  if (JSON.stringify(form.messages) === of(form.mode)) {
+    form.messages = JSON.parse(of(mode)) as Messages;
+  }
+  form.mode = mode;
+}
+
 /** What is wrong with the form that the editor can tell without the server; empty when nothing. */
 export function problemsOf(form: EditorForm): string[] {
   const problems: string[] = [];
@@ -158,10 +266,20 @@ export function problemsOf(form: EditorForm): string[] {
     }
     moments.add(key);
   }
-  if (form.metric === 'mined') {
-    const blocks = parseBlocks(form.blocks);
-    if (form.presets.length === 0 && blocks.length === 0) problems.push('metric');
-    if (!blocks.every(isValidBlockPattern)) problems.push('blocks');
+  if (form.mode === 'ranking') {
+    problems.push(...metricFormProblems(form.metric));
+  } else if (
+    form.targets.length === 0 ||
+    form.targets.some(
+      (target) =>
+        target.label.trim() === '' ||
+        !/^[^\r\n&{}]+$/.test(target.label.trim()) ||
+        !Number.isInteger(target.amount) ||
+        target.amount < 1 ||
+        metricFormProblems(target.metric).length > 0,
+    )
+  ) {
+    problems.push('targets');
   }
   return problems;
 }
@@ -171,8 +289,9 @@ export function toInput(form: EditorForm): EventInput | null {
   const start = zonedToInstant(form.start, form.timezone);
   const end = zonedToInstant(form.end, form.timezone);
   if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  const goals = form.mode === 'goals';
   const places = form.rewards
-    .slice(0, form.top)
+    .slice(0, goals ? 1 : form.top)
     .map((text, index) => ({ place: index + 1, commands: parseCommands(text) }))
     .filter((reward) => reward.commands.length > 0);
   return {
@@ -180,11 +299,17 @@ export function toInput(form: EditorForm): EventInput | null {
     timezone: form.timezone.trim(),
     startsAt: new Date(start).toISOString(),
     endsAt: new Date(end).toISOString(),
-    metric:
-      form.metric === 'mined'
-        ? { kind: 'mined', presets: form.presets, blocks: parseBlocks(form.blocks) }
-        : { kind: 'fish_caught' },
-    scoring: { kind: 'sum' },
+    ...(!goals && { metric: toMetric(form.metric) }),
+    scoring: goals
+      ? {
+          kind: 'targets',
+          targets: form.targets.map((target) => ({
+            label: target.label.trim(),
+            metric: toMetric(target.metric),
+            amount: target.amount,
+          })),
+        }
+      : { kind: 'sum' },
     participants: {
       top: form.top,
       excludeOperators: form.excludeOperators,

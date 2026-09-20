@@ -36,7 +36,7 @@ import {
 } from '../shared.js';
 import EventDetail from './EventDetail.vue';
 import EventEditor from './EventEditor.vue';
-import { describe, formatTime, metricText } from './util.js';
+import { describe, eventText, formatTime } from './util.js';
 
 const REFRESH_MS = 30_000;
 
@@ -187,7 +187,7 @@ onUnmounted(() => clearInterval(timer));
                 </CardTitle>
                 <CardDescription class="flex flex-col gap-0.5">
                   <span>{{ period(event) }}</span>
-                  <span>{{ metricText(event.metric, t) }}</span>
+                  <span>{{ eventText(event, t) }}</span>
                 </CardDescription>
               </button>
               <DropdownMenu v-if="canManage">

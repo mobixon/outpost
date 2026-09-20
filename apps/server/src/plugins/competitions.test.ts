@@ -2,6 +2,7 @@ import { appendFile, mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createCompetitionsPlugin } from '@outpost/plugin-competitions/server';
+import { defaultGoalMessages } from '@outpost/plugin-competitions/shared';
 import consolePlugin from '@outpost/plugin-console/server';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -37,9 +38,16 @@ const folder = () => path.join(root, 'survival');
 let clock = Date.now();
 
 /** Writes the statistics of a player as the game does; every write gets a new modification time. */
-async function writeStats(uuid: string, mined: Record<string, number>): Promise<void> {
+async function writeStats(
+  uuid: string,
+  mined: Record<string, number>,
+  other: Record<string, Record<string, number>> = {},
+): Promise<void> {
   const file = path.join(folder(), 'world', 'stats', `${uuid}.json`);
-  await writeFile(file, JSON.stringify({ stats: { 'minecraft:mined': mined }, DataVersion: 1 }));
+  await writeFile(
+    file,
+    JSON.stringify({ stats: { 'minecraft:mined': mined, ...other }, DataVersion: 1 }),
+  );
   clock += 5000;
   await utimes(file, new Date(clock), new Date(clock));
 }
@@ -430,6 +438,171 @@ describe('competitions', () => {
     });
     expect(badName.statusCode).toBe(400);
   }, 30_000);
+
+  it('rank any statistic of the game, not only the blocks', async () => {
+    const { server, owner, url } = await setUp();
+    const created = await send(server, 'POST', `${url}/events`, {
+      cookie: owner.cookie,
+      body: definition({
+        endsAt: new Date(Date.now() + 60_000).toISOString(),
+        metric: {
+          kind: 'stat',
+          category: 'picked_up',
+          presets: ['ore_drops'],
+          ids: ['minecraft:cherry_log'],
+        },
+        rewards: { places: [] },
+      }),
+    });
+    expect(created.statusCode).toBe(200);
+    const id = created.json<{ id: string }>().id;
+    const detail = async () =>
+      (await get(server, `${url}/events/${id}`, owner.cookie)).json<Detail>();
+    await vi.waitFor(async () => expect((await detail()).countedAt).not.toBeNull(), {
+      timeout: 5000,
+      interval: 100,
+    });
+    // Ores mined do not count, what dropped from them does; so do the ids of your own.
+    await writeStats(
+      STEVE,
+      { 'minecraft:redstone_ore': 50 },
+      {
+        'minecraft:picked_up': {
+          'minecraft:redstone': 12,
+          'minecraft:cherry_log': 3,
+          'minecraft:dirt': 99,
+        },
+      },
+    );
+    await writeStats(ALEX, {}, { 'minecraft:picked_up': { 'minecraft:raw_iron': 4 } });
+    await vi.waitFor(
+      async () =>
+        expect((await detail()).standings.map(({ name, score }) => [name, score])).toEqual([
+          ['Steve', 15],
+          ['Alex', 4],
+        ]),
+      { timeout: 5000, interval: 100 },
+    );
+    await send(server, 'POST', `${url}/events/${id}/cancel`, { cookie: owner.cookie });
+  }, 30_000);
+
+  it('reward everyone who reaches all the goals, and show the progress on request', async () => {
+    const { server, owner, url } = await setUp();
+    const base: Record<string, unknown> = definition();
+    delete base['metric'];
+    const created = await send(server, 'POST', `${url}/events`, {
+      cookie: owner.cookie,
+      body: {
+        ...base,
+        endsAt: new Date(Date.now() + 25_000).toISOString(),
+        scoring: {
+          kind: 'targets',
+          targets: [
+            {
+              label: 'Spruce logs',
+              metric: { kind: 'mined', presets: [], blocks: ['spruce_log'] },
+              amount: 5,
+            },
+            {
+              label: 'Ore drops',
+              metric: { kind: 'stat', category: 'picked_up', presets: ['ore_drops'], ids: [] },
+              amount: 3,
+            },
+          ],
+        },
+        rewards: { places: [{ place: 1, commands: ['give {player} diamond 1'] }] },
+        messages: { ...defaultGoalMessages(), description: '&7Do it all!' },
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const id = created.json<{ id: string }>().id;
+    const detail = async () =>
+      (await get(server, `${url}/events/${id}`, owner.cookie)).json<
+        Detail & {
+          progress: {
+            name: string;
+            done: boolean;
+            place: number | null;
+            targets: { value: number }[];
+          }[];
+          completedCount: number;
+        }
+      >();
+    await vi.waitFor(async () => expect((await detail()).countedAt).not.toBeNull(), {
+      timeout: 5000,
+      interval: 100,
+    });
+
+    // Steve reaches both targets, Alex only the first; the operator does not take part.
+    await writeStats(
+      STEVE,
+      { 'minecraft:oak_log': 10, 'minecraft:spruce_log': 5 },
+      { 'minecraft:picked_up': { 'minecraft:raw_iron': 2, 'minecraft:diamond': 1 } },
+    );
+    await writeStats(ALEX, { 'minecraft:birch_log': 5, 'minecraft:spruce_log': 5 });
+    await writeStats(
+      OPERATOR,
+      { 'minecraft:spruce_log': 50 },
+      { 'minecraft:picked_up': { 'minecraft:coal': 50 } },
+    );
+    await vi.waitFor(async () => expect((await detail()).completedCount).toBe(1), {
+      timeout: 8000,
+      interval: 100,
+    });
+    const seen = await detail();
+    expect(seen.progress.map(({ name, done, place }) => [name, done, place])).toEqual([
+      ['Steve', true, 1],
+      ['Alex', false, null],
+    ]);
+    expect(seen.progress[1]?.targets.map(({ value }) => value)).toEqual([5, 0]);
+    expect(seen.standings.map(({ name, place }) => [name, place])).toEqual([['Steve', 1]]);
+
+    // Everyone is told, and the reward waits for the player: it is given when Steve joins.
+    await vi.waitFor(
+      () =>
+        expect(
+          rcon.commands.some(
+            (command) =>
+              command.startsWith('tellraw @a') && command.includes('has reached all the goals'),
+          ),
+        ).toBe(true),
+      { timeout: 5000, interval: 100 },
+    );
+    await vi.waitFor(
+      async () => {
+        await log('Steve joined the game');
+        await new Promise((resolve) => setTimeout(resolve, 1300));
+        expect(rcon.commands).toContain('give Steve diamond 1');
+      },
+      { timeout: 15_000, interval: 50 },
+    );
+
+    // A player asks for the goals and gets their own progress.
+    await vi.waitFor(
+      async () => {
+        await log('<Alex> !goal');
+        await new Promise((resolve) => setTimeout(resolve, 1300));
+        expect(rcon.commands.some((command) => command.startsWith('tellraw Alex'))).toBe(true);
+      },
+      { timeout: 15_000, interval: 50 },
+    );
+    const answer = rcon.commands.find((command) => command.startsWith('tellraw Alex')) ?? '';
+    expect(answer).toContain('Spruce logs');
+    expect(answer).toContain('5');
+    expect(answer).toContain('Ore drops');
+
+    // At the end the reward is not given twice.
+    await vi.waitFor(async () => expect((await detail()).event.state).toBe('finished'), {
+      timeout: 30_000,
+      interval: 200,
+    });
+    expect(rcon.commands.filter((command) => command === 'give Steve diamond 1')).toHaveLength(1);
+    const finished = await detail();
+    expect(finished.rewards.map(({ playerName, status }) => [playerName, status])).toEqual([
+      ['Steve', 'done'],
+    ]);
+    expect(finished.completedCount).toBe(1);
+  }, 60_000);
 
   it('list the players to pick from, with the operators marked', async () => {
     const { server, owner, viewer, url } = await setUp();

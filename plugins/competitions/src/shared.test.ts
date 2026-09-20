@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   blockMatcher,
   defaultAnnouncements,
+  defaultGoalMessages,
   defaultMessages,
   eventInputSchema,
   metricPatterns,
@@ -94,6 +95,78 @@ describe('the event input', () => {
       'messages.command',
       'messages.join',
     ]);
+  });
+
+  it('takes goals with a metric of their own for every target', () => {
+    const withoutMetric: Partial<ReturnType<typeof input>> = input();
+    delete withoutMetric.metric;
+    const goals = {
+      ...withoutMetric,
+      scoring: {
+        kind: 'targets' as const,
+        targets: [
+          {
+            label: 'Spruce logs',
+            metric: { kind: 'mined' as const, presets: [], blocks: ['spruce_log'] },
+            amount: 20,
+          },
+          {
+            label: 'Ore drops',
+            metric: {
+              kind: 'stat' as const,
+              category: 'picked_up' as const,
+              presets: ['ore_drops' as const],
+              ids: [],
+            },
+            amount: 5,
+          },
+        ],
+      },
+      participants: { top: 3, excludeOperators: true, excluded: [] },
+      messages: defaultGoalMessages(),
+    };
+    expect(problems(goals)).toEqual([]);
+    // Targets need to say what they count, and a reward is for everyone: place 1 only.
+    const empty = {
+      ...goals,
+      scoring: {
+        kind: 'targets' as const,
+        targets: [
+          { label: 'x', metric: { kind: 'mined' as const, presets: [], blocks: [] }, amount: 1 },
+        ],
+      },
+    };
+    expect(problems(empty)).toEqual(['scoring.targets.0.metric']);
+    expect(
+      problems({ ...goals, rewards: { places: [{ place: 2, commands: ['say hi'] }] } }),
+    ).toEqual(['rewards.places.0.place']);
+    expect(
+      problems({ ...goals, rewards: { places: [{ place: 1, commands: ['say {player}'] }] } }),
+    ).toEqual([]);
+    const labelled = (label: string) => ({
+      ...goals,
+      scoring: {
+        kind: 'targets' as const,
+        targets: [{ label, metric: { kind: 'fish_caught' as const }, amount: 1 }],
+      },
+    });
+    expect(problems(labelled('Bad {label} &c'))).toEqual(['scoring.targets.0.label']);
+    expect(problems({ ...goals, scoring: { kind: 'targets', targets: [] } })).toEqual([
+      'scoring.targets',
+    ]);
+  });
+
+  it('needs a metric for a ranking, and takes the other statistics', () => {
+    const withoutMetric: Partial<ReturnType<typeof input>> = input();
+    delete withoutMetric.metric;
+    expect(problems(withoutMetric)).toEqual(['metric']);
+    const stat = (presets: string[]) => ({
+      ...input(),
+      metric: { kind: 'stat', category: 'picked_up', presets, ids: [] },
+    });
+    expect(problems(stat(['ore_drops']))).toEqual([]);
+    expect(problems(stat(['hostile_mobs']))).toEqual(['metric']);
+    expect(problems(stat([]))).toEqual(['metric']);
   });
 
   it('accepts the default announcements, and only one message per moment', () => {

@@ -23,8 +23,53 @@ export default {
     },
     metric: {
       mined: 'Добыто блоков',
+      stat: 'Другая статистика',
+      goals: 'Цели',
       fish_caught: 'Поймано рыбы',
-      presets: { wood: 'Дерево', stone: 'Камень', ores: 'Руды', earth: 'Земля' },
+      statPresets: {
+        ore_drops: 'Выпадение из руд',
+        crops: 'Урожай',
+        hostile_mobs: 'Враждебные мобы',
+        undead: 'Нежить',
+        farm_animals: 'Домашние животные',
+        bosses: 'Боссы',
+        mob_kills: 'Все убийства мобов',
+        deaths: 'Смерти',
+        animals_bred: 'Выведено животных',
+        villager_trades: 'Обмены с жителями',
+        jumps: 'Прыжки',
+        enchants: 'Зачаровано предметов',
+      },
+      categories: {
+        picked_up: 'Подобрано предметов',
+        killed: 'Убито мобов',
+        crafted: 'Скрафчено предметов',
+        used: 'Использовано предметов',
+        broken: 'Сломано инструментов',
+        dropped: 'Выброшено предметов',
+        killed_by: 'Причина смерти',
+        custom: 'Счётчики',
+      },
+      presets: {
+        wood: 'Дерево',
+        stone: 'Камень',
+        ores: 'Руды',
+        earth: 'Земля',
+        cherry_grove: 'Вишнёвая роща',
+        pale_garden: 'Бледный сад',
+        mangrove_swamp: 'Мангровое болото',
+        jungle: 'Джунгли',
+        desert_badlands: 'Пустыня и бесплодные земли',
+        snowy: 'Снежные биомы',
+        mushroom_fields: 'Грибные поля',
+        nether_forests: 'Леса Незера',
+        nether_terrain: 'Ландшафт Незера',
+        deep_dark: 'Глубокая тьма',
+        caves: 'Сочные и капельниковые пещеры',
+        ocean: 'Океан',
+        the_end: 'Энд',
+        mountains: 'Горы',
+      },
       other: 'ещё блоков: {count}',
     },
     actions: {
@@ -36,6 +81,11 @@ export default {
       delete: 'Удалить',
     },
     detail: {
+      goalsInfo: 'Цели для всех',
+      progress: 'Прогресс',
+      progressEmpty: 'Пока ни у кого нет прогресса.',
+      reachedAll: 'Выполнили все цели: {count}',
+      doneAs: 'Готово, номер {place}',
       countNow: 'Посчитать сейчас',
       countNowTitle: 'Посчитать топ сейчас?',
       countNowText:
@@ -94,6 +144,36 @@ export default {
       capability_missing: 'Сначала подключите коннектор Files этого сервера.',
     },
     form: {
+      mode: 'Тип ивента',
+      modes: { ranking: 'Топ игроков', goals: 'Цели для всех' },
+      modeHints: {
+        ranking: 'Игроки с наибольшим результатом занимают места и получают награду своего места.',
+        goals:
+          'Каждый, кто выполнил все цели, получает награду один раз. У каждой цели свой счётчик.',
+      },
+      statCategory: 'Статистика',
+      categoryHints: {
+        picked_up:
+          'Предметы, которые игрок подобрал: выпавшее при добыче и с мобов, собранный урожай. Выпадение из руд вроде raw_copper нельзя накрутить шёлковым касанием; выбросить предмет и подобрать снова всё равно засчитывается.',
+        killed: 'Мобы, которых убил игрок, по id моба, например minecraft:zombie.',
+        crafted:
+          'Скрафченные предметы. Крафт и обратный крафт (слитки и блоки) можно повторять, поэтому берите дорогие рецепты.',
+        used: 'Использованные предметы: поставленные блоки, использованные инструменты, съеденная еда.',
+        broken: 'Инструменты, которые сломались, то есть исчерпали прочность.',
+        dropped: 'Предметы, которые игрок выбросил.',
+        killed_by: 'Кто убил игрока, по id моба или урона, например minecraft:creeper.',
+        custom:
+          'Общие счётчики игры: minecraft:mob_kills, minecraft:deaths, minecraft:animals_bred, minecraft:jump и другие.',
+      },
+      statIds: 'Другие id',
+      statIdsHint:
+        'Id предметов или мобов, по одному в строке или через запятую. * заменяет любую часть имени: minecraft:raw_copper, *_ingot.',
+      targetLabel: 'Название цели',
+      targetAmount: 'Количество',
+      addTarget: 'Добавить цель',
+      removeTarget: 'Убрать',
+      goalsReward: 'Награда каждому, кто выполнил все цели',
+      announceCompletions: 'Сообщать всем, когда игрок выполнил все цели',
       countEvery: 'Обновлять топ каждые',
       everyMinutes: '{count} мин',
       countEveryHint:
@@ -155,6 +235,7 @@ export default {
       descriptionHint:
         'О чём ивент, своими словами. Показывается там, где в тексте есть плейсхолдер описания.',
       templates: {
+        completion: 'Сообщение, когда игрок выполнил все цели',
         top: 'Ответ на команду в чате',
         entry: 'Одно место в топе',
         join: 'Сообщение при входе',

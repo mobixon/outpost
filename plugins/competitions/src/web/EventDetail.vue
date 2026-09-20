@@ -38,7 +38,7 @@ import {
   type EventDetail,
   type RewardStatus,
 } from '../shared.js';
-import { describe, formatSpan, formatTime, metricText } from './util.js';
+import { describe, eventText, formatSpan, formatTime } from './util.js';
 
 const REFRESH_MS = 15_000;
 /** A start later than this after the planned one is worth a warning. */
@@ -117,7 +117,7 @@ const description = computed(() =>
     .map((part) => part.text)
     .join(''),
 );
-const metricLabel = computed(() => (event.value === null ? '' : metricText(event.value.metric, t)));
+const metricLabel = computed(() => (event.value === null ? '' : eventText(event.value, t)));
 const lateStart = computed(() => {
   const value = event.value;
   if (value?.baselineAt == null) return null;
@@ -218,8 +218,11 @@ defineExpose({ reload: load });
         <CardContent class="text-muted-foreground flex flex-col gap-1 text-sm">
           <p v-if="description !== ''">{{ description }}</p>
           <p>
-            {{ t('competitions.detail.topOf', { top: event.participants.top })
-            }}<template v-if="event.participants.excludeOperators">
+            <template v-if="event.scoring.kind === 'sum'">
+              {{ t('competitions.detail.topOf', { top: event.participants.top }) }}
+            </template>
+            <template v-else>{{ t('competitions.detail.goalsInfo') }}</template
+            ><template v-if="event.participants.excludeOperators">
               · {{ t('competitions.detail.operatorsOut') }}</template
             ><template v-if="event.participants.excluded.length > 0">
               ·
@@ -238,7 +241,56 @@ defineExpose({ reload: load });
         <AlertDescription>{{ warning }}</AlertDescription>
       </Alert>
 
-      <Card>
+      <Card v-if="event.scoring.kind === 'targets'">
+        <CardHeader>
+          <CardTitle>{{ t('competitions.detail.progress') }}</CardTitle>
+          <CardDescription>
+            {{ t('competitions.detail.reachedAll', { count: detail.completedCount }) }} ·
+            {{
+              detail.countedAt === null
+                ? t('competitions.notCounted')
+                : t('competitions.updated', { time: timeIn(detail.countedAt) })
+            }}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p v-if="detail.progress.length === 0" class="text-muted-foreground text-sm">
+            {{ t('competitions.detail.progressEmpty') }}
+          </p>
+          <div v-else class="overflow-x-auto">
+            <Table data-testid="competition-progress">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{{ t('competitions.detail.player') }}</TableHead>
+                  <TableHead v-for="target in event.scoring.targets" :key="target.label">
+                    {{ target.label }}
+                  </TableHead>
+                  <TableHead class="text-right">{{ t('competitions.detail.status') }}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow v-for="row in detail.progress" :key="row.uuid">
+                  <TableCell>{{ row.name }}</TableCell>
+                  <TableCell v-for="target in row.targets" :key="target.label" class="tabular-nums">
+                    <span :class="target.value >= target.amount ? 'text-emerald-600' : ''">
+                      {{ formatScore(Math.min(target.value, target.amount)) }}/{{
+                        formatScore(target.amount)
+                      }}
+                    </span>
+                  </TableCell>
+                  <TableCell class="text-right">
+                    <Badge v-if="row.done" variant="secondary">
+                      {{ t('competitions.detail.doneAs', { place: row.place }) }}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card v-else>
         <CardHeader>
           <CardTitle>{{ t('competitions.detail.standings') }}</CardTitle>
           <CardDescription>
