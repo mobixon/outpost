@@ -1,5 +1,5 @@
 import { ApiError } from '@outpost/web-plugin-api';
-import type { Metric } from '../shared.js';
+import type { Metric, Scoring } from '../shared.js';
 
 type Translate = (key: string, named?: Record<string, unknown>) => string;
 type Exists = (key: string) => boolean;
@@ -39,9 +39,26 @@ export function metricText(
   t: (key: string, named?: Record<string, unknown>) => string,
 ): string {
   if (metric.kind === 'fish_caught') return t('competitions.metric.fish_caught');
-  const parts = metric.presets.map((preset) => t(`competitions.metric.presets.${preset}`));
-  if (metric.blocks.length > 0) {
-    parts.push(t('competitions.metric.other', { count: metric.blocks.length }));
+  const parts =
+    metric.kind === 'mined'
+      ? metric.presets.map((preset) => t(`competitions.metric.presets.${preset}`))
+      : metric.presets.map((preset) => t(`competitions.metric.statPresets.${preset}`));
+  const others = metric.kind === 'mined' ? metric.blocks.length : metric.ids.length;
+  if (others > 0) parts.push(t('competitions.metric.other', { count: others }));
+  const head =
+    metric.kind === 'mined'
+      ? t('competitions.metric.mined')
+      : t(`competitions.metric.categories.${metric.category}`);
+  return `${head}: ${parts.join(', ')}`;
+}
+
+/** What an event counts, in a few words: its metric, or the names of its goals. */
+export function eventText(
+  event: { metric?: Metric; scoring: Scoring },
+  t: (key: string, named?: Record<string, unknown>) => string,
+): string {
+  if (event.scoring.kind === 'targets') {
+    return `${t('competitions.metric.goals')}: ${event.scoring.targets.map((target) => target.label).join(', ')}`;
   }
-  return `${t('competitions.metric.mined')}: ${parts.join(', ')}`;
+  return event.metric === undefined ? '' : metricText(event.metric, t);
 }

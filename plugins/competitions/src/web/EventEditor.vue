@@ -34,7 +34,9 @@ import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   formatScore,
+  goalView,
   renderAnnouncement,
+  renderCompletion,
   renderJoin,
   renderResults,
   renderReward,
@@ -42,7 +44,6 @@ import {
   type RenderableEvent,
 } from '../render.js';
 import {
-  BLOCK_PRESET_IDS,
   candidateListSchema,
   COMPETITIONS_PLUGIN_ID,
   eventSchema,
@@ -54,11 +55,11 @@ import {
   MAX_ANNOUNCEMENT_MINUTES,
   MAX_ANNOUNCEMENTS,
   MAX_DESCRIPTION_LENGTH,
-  METRIC_KINDS,
+  MAX_TARGET_AMOUNT,
+  MAX_TARGETS,
   MAX_TOP,
   PLACEHOLDERS,
   REWARD_COMMAND_PERMISSION,
-  type BlockPreset,
   type CandidateList,
   type CompetitionEvent,
   type Messages,
@@ -71,13 +72,17 @@ import {
   COUNT_EVERY_CHOICES,
   changeTimezone,
   emptyForm,
+  emptyTarget,
   fromEvent,
-  parseBlocks,
   parseCommands,
   PERIODS,
   problemsOf,
+  switchMode,
   toInput,
+  toMetric,
+  type TargetForm,
 } from './form.js';
+import MetricPicker from './MetricPicker.vue';
 import PlayerPicker from './PlayerPicker.vue';
 import { describe } from './util.js';
 
@@ -134,17 +139,6 @@ function setZone(): void {
   if (isValidTimezone(zone)) changeTimezone(form.value, zone);
 }
 
-function togglePreset(preset: BlockPreset): void {
-  const { presets } = form.value;
-  form.value.presets = presets.includes(preset)
-    ? presets.filter((entry) => entry !== preset)
-    : [...presets, preset];
-}
-
-function setMetric(value: unknown): void {
-  if (value === 'mined' || value === 'fish_caught') form.value.metric = value;
-}
-
 function setTop(value: unknown): void {
   const top = Number(value);
   if (Number.isInteger(top) && top >= 1 && top <= MAX_TOP) form.value.top = top;
@@ -177,14 +171,21 @@ const TEMPLATES = [
   'join',
   'results',
   'reward',
+  'completion',
 ] as const satisfies readonly (keyof Messages & TemplateKind)[];
-const templateRows: Record<(typeof TEMPLATES)[number], number> = {
+type TemplateKey = (typeof TEMPLATES)[number];
+const templateRows: Record<TemplateKey, number> = {
   top: 5,
   entry: 1,
   join: 4,
   results: 4,
   reward: 2,
+  completion: 2,
 };
+/** The texts a kind of event has: the message of a goal reached belongs to goals only. */
+const templateKeys = computed(() =>
+  TEMPLATES.filter((key) => key !== 'completion' || form.value.mode === 'goals'),
+);
 
 const placeholderList = (kind: TemplateKind) =>
   PLACEHOLDERS[kind].map((name) => `{${name}}`).join(', ');
@@ -201,32 +202,64 @@ const SAMPLE_STANDINGS: Standing[] = [
 
 const sample = computed((): RenderableEvent => {
   const value = form.value;
-  return {
+  const common = {
     name: value.name.trim() || t('competitions.form.name'),
     startsAt: new Date(Date.now() + 10 * 60_000).toISOString(),
     endsAt: new Date(Date.now() + (3 * 24 + 5) * 3_600_000).toISOString(),
     timezone: isValidTimezone(value.timezone) ? value.timezone : 'UTC',
-    metric:
-      value.metric === 'mined'
-        ? { kind: 'mined', presets: value.presets, blocks: parseBlocks(value.blocks) }
-        : { kind: 'fish_caught' },
     messages: value.messages,
     participants: { top: value.top, excludeOperators: value.excludeOperators, excluded: [] },
   };
+  return value.mode === 'goals'
+    ? {
+        ...common,
+        scoring: {
+          kind: 'targets',
+          targets: sampleTargets.value,
+        },
+      }
+    : { ...common, metric: toMetric(value.metric), scoring: { kind: 'sum' } };
 });
+
+/** The goals of the form as the texts show them; the ones that are not valid yet are left out. */
+const sampleTargets = computed(() =>
+  form.value.targets
+    .filter((target) => target.label.trim() !== '' && target.amount >= 1)
+    .map((target) => ({
+      label: target.label.trim(),
+      metric: toMetric(target.metric),
+      amount: target.amount,
+    })),
+);
 
 const previews = computed(() => {
   const now = Date.now();
   const event = sample.value;
   const viewer = { name: 'Alex' };
+  const goals =
+    form.value.mode === 'goals'
+      ? goalView(
+          sampleTargets.value,
+          {
+            targets: sampleTargets.value.map((target, index) => ({
+              label: target.label,
+              value: index === 0 ? target.amount : Math.floor(target.amount / 2),
+              amount: target.amount,
+            })),
+          },
+          2,
+        )
+      : undefined;
+  const winners = form.value.mode === 'goals' ? SAMPLE_STANDINGS.slice(0, 2) : SAMPLE_STANDINGS;
   return {
-    top: renderTop(event, SAMPLE_STANDINGS, now, viewer),
-    join: renderJoin(event, SAMPLE_STANDINGS, now, viewer),
-    results: renderResults(event, SAMPLE_STANDINGS, now),
+    top: renderTop(event, winners, now, viewer, goals),
+    join: renderJoin(event, winners, now, viewer, goals),
+    results: renderResults(event, winners, now, goals),
     reward: renderReward(event, { name: 'Steve', place: 1, score: 1240 }),
+    completion: renderCompletion(event, 'Steve', 1, 2),
   };
 });
-const previewOf = (key: (typeof TEMPLATES)[number]) =>
+const previewOf = (key: TemplateKey) =>
   key === 'entry'
     ? SAMPLE_STANDINGS.slice(0, 1).map((standing) =>
         parseMessage(
@@ -238,6 +271,25 @@ const previewOf = (key: (typeof TEMPLATES)[number]) =>
         ),
       )
     : previews.value[key].map(parseMessage);
+
+// --- The kind of event and its goals -----------------------------------------------------------
+
+function setMode(value: unknown): void {
+  if (value === 'ranking' || value === 'goals') switchMode(form.value, value);
+}
+
+function addTarget(): void {
+  if (form.value.targets.length < MAX_TARGETS) form.value.targets.push(emptyTarget());
+}
+
+function removeTarget(index: number): void {
+  if (form.value.targets.length > 1) form.value.targets.splice(index, 1);
+}
+
+function setAmount(target: TargetForm, value: string): void {
+  const amount = Math.round(Number(value));
+  target.amount = Number.isFinite(amount) ? Math.min(Math.max(amount, 0), MAX_TARGET_AMOUNT) : 0;
+}
 
 // --- Announcements ---------------------------------------------------------------------------
 
@@ -401,49 +453,83 @@ async function testReward(place: number): Promise<void> {
         <section class="flex flex-col gap-4">
           <h3 class="text-sm font-semibold">{{ t('competitions.form.counting') }}</h3>
           <Field>
-            <FieldLabel for="comp-metric">{{ t('competitions.form.metric') }}</FieldLabel>
-            <Select :model-value="form.metric" :disabled="running" @update:model-value="setMetric">
-              <SelectTrigger id="comp-metric" class="w-full"><SelectValue /></SelectTrigger>
+            <FieldLabel for="comp-mode">{{ t('competitions.form.mode') }}</FieldLabel>
+            <Select :model-value="form.mode" :disabled="running" @update:model-value="setMode">
+              <SelectTrigger id="comp-mode" class="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem v-for="kind in METRIC_KINDS" :key="kind" :value="kind">
-                  {{ t(`competitions.metric.${kind}`) }}
-                </SelectItem>
+                <SelectItem value="ranking">{{ t('competitions.form.modes.ranking') }}</SelectItem>
+                <SelectItem value="goals">{{ t('competitions.form.modes.goals') }}</SelectItem>
               </SelectContent>
             </Select>
-            <FieldDescription v-if="form.metric === 'fish_caught'">
-              {{ t('competitions.form.fishHint') }}
-            </FieldDescription>
+            <FieldDescription>{{ t(`competitions.form.modeHints.${form.mode}`) }}</FieldDescription>
           </Field>
-          <Field v-if="form.metric === 'mined'">
-            <FieldLabel>{{ t('competitions.form.presets') }}</FieldLabel>
-            <div class="flex flex-wrap gap-2">
-              <Button
-                v-for="preset in BLOCK_PRESET_IDS"
-                :key="preset"
-                type="button"
-                size="sm"
-                :variant="form.presets.includes(preset) ? 'default' : 'outline'"
-                :aria-pressed="form.presets.includes(preset)"
+          <MetricPicker
+            v-if="form.mode === 'ranking'"
+            id="comp-metric"
+            v-model="form.metric"
+            :disabled="running"
+          />
+          <template v-else>
+            <div
+              v-for="(target, index) in form.targets"
+              :key="index"
+              class="flex flex-col gap-3 rounded-md border p-3"
+            >
+              <FieldGroup class="grid gap-3 sm:grid-cols-[1fr_8rem_auto]">
+                <Field>
+                  <FieldLabel :for="`comp-target-label-${index}`">
+                    {{ t('competitions.form.targetLabel') }}
+                  </FieldLabel>
+                  <Input
+                    :id="`comp-target-label-${index}`"
+                    v-model="target.label"
+                    maxlength="40"
+                    :disabled="running"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel :for="`comp-target-amount-${index}`">
+                    {{ t('competitions.form.targetAmount') }}
+                  </FieldLabel>
+                  <Input
+                    :id="`comp-target-amount-${index}`"
+                    type="number"
+                    min="1"
+                    :model-value="String(target.amount)"
+                    :disabled="running"
+                    @update:model-value="(value: string) => setAmount(target, value)"
+                  />
+                </Field>
+                <div class="flex items-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    :disabled="running || form.targets.length <= 1"
+                    @click="removeTarget(index)"
+                  >
+                    {{ t('competitions.form.removeTarget') }}
+                  </Button>
+                </div>
+              </FieldGroup>
+              <MetricPicker
+                :id="`comp-target-${index}`"
+                v-model="target.metric"
                 :disabled="running"
-                @click="togglePreset(preset)"
+              />
+            </div>
+            <div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                :disabled="running || form.targets.length >= MAX_TARGETS"
+                @click="addTarget"
               >
-                {{ t(`competitions.metric.presets.${preset}`) }}
+                {{ t('competitions.form.addTarget') }}
               </Button>
             </div>
-          </Field>
-          <Field v-if="form.metric === 'mined'">
-            <FieldLabel for="comp-blocks">{{ t('competitions.form.blocks') }}</FieldLabel>
-            <Textarea
-              id="comp-blocks"
-              v-model="form.blocks"
-              rows="2"
-              class="font-mono"
-              spellcheck="false"
-              :disabled="running"
-              :aria-invalid="problems.includes('blocks')"
-            />
-            <FieldDescription>{{ t('competitions.form.blocksHint') }}</FieldDescription>
-          </Field>
+          </template>
           <Field>
             <FieldLabel for="comp-every">{{ t('competitions.form.countEvery') }}</FieldLabel>
             <Select
@@ -468,7 +554,7 @@ async function testReward(place: number): Promise<void> {
         <section class="flex flex-col gap-4">
           <h3 class="text-sm font-semibold">{{ t('competitions.form.participants') }}</h3>
           <FieldGroup class="grid gap-4 sm:grid-cols-2">
-            <Field>
+            <Field v-if="form.mode === 'ranking'">
               <FieldLabel for="comp-top">{{ t('competitions.form.top') }}</FieldLabel>
               <Select :model-value="String(form.top)" @update:model-value="setTop">
                 <SelectTrigger id="comp-top" class="w-full"><SelectValue /></SelectTrigger>
@@ -513,9 +599,13 @@ async function testReward(place: number): Promise<void> {
             />
             <FieldDescription>{{ t('competitions.form.testPlayerHint') }}</FieldDescription>
           </Field>
-          <Field v-for="place in form.top" :key="place">
+          <Field v-for="place in form.mode === 'goals' ? 1 : form.top" :key="place">
             <FieldLabel :for="`comp-reward-${place}`">
-              {{ t('competitions.form.placeN', { place }) }}
+              {{
+                form.mode === 'goals'
+                  ? t('competitions.form.goalsReward')
+                  : t('competitions.form.placeN', { place })
+              }}
             </FieldLabel>
             <Textarea
               :id="`comp-reward-${place}`"
@@ -588,6 +678,12 @@ async function testReward(place: number): Promise<void> {
             <Switch id="comp-join-notice" v-model="form.messages.joinNotice" />
             <FieldLabel for="comp-join-notice">{{ t('competitions.form.joinNotice') }}</FieldLabel>
           </div>
+          <div v-if="form.mode === 'goals'" class="flex items-center gap-3">
+            <Switch id="comp-completions" v-model="form.messages.announceCompletions" />
+            <FieldLabel for="comp-completions">
+              {{ t('competitions.form.announceCompletions') }}
+            </FieldLabel>
+          </div>
           <div class="flex items-center gap-3">
             <Switch id="comp-announce" v-model="form.messages.announceResults" />
             <FieldLabel for="comp-announce">
@@ -597,7 +693,7 @@ async function testReward(place: number): Promise<void> {
           <p class="text-muted-foreground text-xs">
             {{ t('competitions.form.previewNote') }}
           </p>
-          <Field v-for="key in TEMPLATES" :key="key">
+          <Field v-for="key in templateKeys" :key="key">
             <FieldLabel :for="`comp-template-${key}`">
               {{ t(`competitions.form.templates.${key}`) }}
             </FieldLabel>

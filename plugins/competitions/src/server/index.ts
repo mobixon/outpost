@@ -179,9 +179,12 @@ function setup(
       .filter((task) => rewardPayloadSchema.safeParse(task.payload).data?.eventId === row.id)
       .flatMap((task) => rewardStatus(task, showCommands))
       .sort((a, b) => a.place - b.place || a.index - b.index);
+    const { rows: progress, completed } = await engine.progress(row);
     return {
       event: visible(toEvent(row), permissions),
       standings: await engine.standings(row),
+      progress,
+      completedCount: completed,
       countedAt: row.counted_at === null ? null : new Date(Number(row.counted_at)).toISOString(),
       rewards,
       capabilities: {
@@ -319,7 +322,9 @@ function setup(
         directory.forget();
         void engine.count(updated).catch(() => undefined);
       }
-      if (!same(config.metric, current.metric)) sampler.forget(row.id);
+      if (!same(config.metric, current.metric) || !same(config.scoring, current.scoring)) {
+        sampler.forget(row.id);
+      }
       await ctx.audit.record({
         action: 'event_updated',
         userId: user.id,

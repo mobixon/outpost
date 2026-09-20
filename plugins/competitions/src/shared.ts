@@ -1,7 +1,9 @@
 import { PLAYER_NAME_PATTERN, normalizeUuid, templatePlaceholders } from '@outpost/shared';
 import { z } from 'zod';
+import { metricProblem, metricSchema, scoringSchema } from './metrics.js';
 
 export * from './constants.js';
+export * from './metrics.js';
 
 /** The most places a competition rewards. */
 export const MAX_TOP = 10;
@@ -11,7 +13,6 @@ export const MAX_TEMPLATE_LENGTH = 600;
 export const MAX_COMMANDS_PER_PLACE = 10;
 export const MAX_COMMAND_LENGTH = 400;
 export const MAX_EXCLUDED = 100;
-export const MAX_BLOCKS = 50;
 export const MAX_DURATION_DAYS = 366;
 /** Chat lines a message may have once its placeholders are filled in. */
 export const MAX_MESSAGE_LINES = 16;
@@ -24,113 +25,6 @@ export const DEFAULT_COUNT_MINUTES = 5;
 
 export const EVENT_STATES = ['scheduled', 'active', 'finishing', 'finished', 'cancelled'] as const;
 export type EventState = (typeof EVENT_STATES)[number];
-
-// --- What is counted -------------------------------------------------------------------------
-
-/** Groups of blocks to pick from; the ids may use `*` for any part of a name. */
-export const BLOCK_PRESETS = {
-  wood: [
-    'minecraft:*_log',
-    'minecraft:*_wood',
-    'minecraft:crimson_stem',
-    'minecraft:warped_stem',
-    'minecraft:stripped_crimson_stem',
-    'minecraft:stripped_warped_stem',
-    'minecraft:crimson_hyphae',
-    'minecraft:warped_hyphae',
-    'minecraft:stripped_crimson_hyphae',
-    'minecraft:stripped_warped_hyphae',
-  ],
-  stone: [
-    'minecraft:stone',
-    'minecraft:cobblestone',
-    'minecraft:deepslate',
-    'minecraft:cobbled_deepslate',
-    'minecraft:granite',
-    'minecraft:diorite',
-    'minecraft:andesite',
-    'minecraft:tuff',
-  ],
-  ores: ['minecraft:*_ore', 'minecraft:ancient_debris'],
-  earth: [
-    'minecraft:dirt',
-    'minecraft:grass_block',
-    'minecraft:coarse_dirt',
-    'minecraft:podzol',
-    'minecraft:mycelium',
-    'minecraft:rooted_dirt',
-    'minecraft:mud',
-  ],
-} as const satisfies Record<string, readonly string[]>;
-export const BLOCK_PRESET_IDS = Object.keys(BLOCK_PRESETS) as [BlockPreset, ...BlockPreset[]];
-export type BlockPreset = keyof typeof BLOCK_PRESETS;
-
-const BLOCK_PATTERN = /^[a-z0-9_.-]+:[a-z0-9_./*-]+$/;
-
-/** A block id or pattern as the counters spell it: lowercase, with the `minecraft:` namespace. */
-export function normalizeBlockPattern(text: string): string {
-  const pattern = text.trim().toLowerCase();
-  return pattern.includes(':') || pattern === '' ? pattern : `minecraft:${pattern}`;
-}
-
-export const isValidBlockPattern = (text: string) =>
-  BLOCK_PATTERN.test(normalizeBlockPattern(text));
-
-const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/** A test for block ids from patterns, in which `*` stands for any part of a name. */
-export function blockMatcher(patterns: readonly string[]): (id: string) => boolean {
-  const expressions = patterns.map(
-    (pattern) => new RegExp(`^${pattern.split('*').map(escapeRegExp).join('[a-z0-9_./-]*')}$`),
-  );
-  return (id) => expressions.some((expression) => expression.test(id));
-}
-
-const minedMetricSchema = z.object({
-  kind: z.literal('mined'),
-  presets: z.array(z.enum(BLOCK_PRESET_IDS)).max(BLOCK_PRESET_IDS.length),
-  blocks: z
-    .array(
-      z
-        .string()
-        .trim()
-        .max(100)
-        .refine(isValidBlockPattern, { error: 'Use ids like minecraft:oak_log or *_log' }),
-    )
-    .max(MAX_BLOCKS),
-});
-/** Fishing catches, as the game counts them (`custom: fish_caught`). */
-const fishCaughtMetricSchema = z.object({ kind: z.literal('fish_caught') });
-
-/** What is counted; more kinds can join this list. */
-export const metricSchema = z.discriminatedUnion('kind', [
-  minedMetricSchema,
-  fishCaughtMetricSchema,
-]);
-export type Metric = z.infer<typeof metricSchema>;
-export const METRIC_KINDS = ['mined', 'fish_caught'] as const satisfies readonly Metric['kind'][];
-
-/** The block patterns of a metric that counts blocks; none for the others. */
-export function metricPatterns(metric: Metric): string[] {
-  if (metric.kind !== 'mined') return [];
-  return [
-    ...new Set([
-      ...metric.presets.flatMap((preset) => BLOCK_PRESETS[preset]),
-      ...metric.blocks.map(normalizeBlockPattern),
-    ]),
-  ];
-}
-
-/** Whether a metric says what it counts: a metric of blocks needs at least one. */
-export const metricIsComplete = (metric: Metric) =>
-  metric.kind !== 'mined' || metricPatterns(metric).length > 0;
-
-/** How a counter becomes a score; more kinds can join this list. */
-export const scoringSchema = z.discriminatedUnion('kind', [
-  /** What the counter grew by from the start to the end of the competition. */
-  z.object({ kind: z.literal('sum') }),
-]);
-export type Scoring = z.infer<typeof scoringSchema>;
 
 // --- Who takes part and what they win -------------------------------------------------------
 
@@ -177,6 +71,8 @@ export const rewardsViewSchema = z.object({
 /** The placeholders each text of a competition may use. */
 export const PLACEHOLDERS = {
   top: [
+    'goals',
+    'completed',
     'command',
     'event',
     'description',
@@ -189,6 +85,8 @@ export const PLACEHOLDERS = {
     'your_score',
   ],
   join: [
+    'goals',
+    'completed',
     'command',
     'event',
     'description',
@@ -200,11 +98,13 @@ export const PLACEHOLDERS = {
     'your_place',
     'your_score',
   ],
-  results: ['event', 'description', 'metric', 'top'],
+  results: ['goals', 'completed', 'event', 'description', 'metric', 'top'],
   reward: ['event', 'player', 'place', 'score'],
   entry: ['place', 'name', 'score'],
   command: ['player', 'uuid', 'place', 'score', 'event'],
   announce: [
+    'goals',
+    'completed',
     'command',
     'event',
     'description',
@@ -215,6 +115,7 @@ export const PLACEHOLDERS = {
     'ends_in',
     'top',
   ],
+  completion: ['event', 'player', 'number', 'completed'],
 } as const;
 export type TemplateKind = keyof typeof PLACEHOLDERS;
 
@@ -253,6 +154,11 @@ export const messagesSchema = z.object({
   results: template('results', 0),
   /** Told to a winner when the reward is given. */
   reward: template('reward', 0),
+  /** Goals: told to everyone when a player has reached all of them. */
+  announceCompletions: z.boolean().default(true),
+  completion: template('completion', 0).default(
+    '&6[{event}] &f{player} &ahas reached all the goals!',
+  ),
 });
 export type Messages = z.infer<typeof messagesSchema>;
 
@@ -309,6 +215,30 @@ export function defaultMessages(): Messages {
     announceResults: true,
     results: ['&6&l{event}&r &7is over! The winners:', '{top}'].join('\n'),
     reward: '&6[{event}] &aYou took place {place} with {score} - your reward is here!',
+    announceCompletions: true,
+    completion: '&6[{event}] &f{player} &ahas reached all the goals!',
+  };
+}
+
+/** The texts of a goals event: progress instead of a top. */
+export function defaultGoalMessages(): Messages {
+  return {
+    ...defaultMessages(),
+    command: '!goal',
+    top: [
+      '&6&l{event}&r &7- {metric}',
+      '{description}',
+      '{goals}',
+      '&7Reached by &f{completed} &7players. Ends in &f{ends_in}',
+    ].join('\n'),
+    entry: '&e{place}. &f{name}',
+    join: [
+      '&6&l{event}&r &7ends in &f{ends_in}',
+      '{description}',
+      '&7Type &f{command} &7to see your goals.',
+    ].join('\n'),
+    results: ['&6&l{event}&r &7is over! Reached all the goals: &f{completed}', '{top}'].join('\n'),
+    reward: '&6[{event}] &aAll goals reached (you were number {place})! Your reward is here!',
   };
 }
 
@@ -341,7 +271,8 @@ const eventFields = z.object({
   timezone: timezoneSchema,
   startsAt: z.iso.datetime({ offset: true }),
   endsAt: z.iso.datetime({ offset: true }),
-  metric: metricSchema,
+  /** What is counted; not used by goals, which have a metric of their own for every target. */
+  metric: metricSchema.optional(),
   scoring: scoringSchema,
   participants: participantsSchema,
   rewards: rewardsSchema,
@@ -384,7 +315,18 @@ export const eventInputSchema = eventFields.superRefine((event, context) => {
       message: `A competition lasts at most ${MAX_DURATION_DAYS} days`,
     });
   }
-  if (!metricIsComplete(event.metric)) {
+  const goals = event.scoring.kind === 'targets';
+  if (event.scoring.kind === 'targets') {
+    event.scoring.targets.forEach((target, index) => {
+      if (metricProblem(target.metric) !== null) {
+        context.addIssue({
+          code: 'custom',
+          path: ['scoring', 'targets', index, 'metric'],
+          message: 'Pick what is counted',
+        });
+      }
+    });
+  } else if (event.metric === undefined || metricProblem(event.metric) !== null) {
     context.addIssue({ code: 'custom', path: ['metric'], message: 'Pick what is counted' });
   }
   const moments = new Set<string>();
@@ -401,11 +343,13 @@ export const eventInputSchema = eventFields.superRefine((event, context) => {
   });
   const places = new Set<number>();
   event.rewards.places.forEach((reward, index) => {
-    if (reward.place > event.participants.top || places.has(reward.place)) {
+    if (reward.place > (goals ? 1 : event.participants.top) || places.has(reward.place)) {
       context.addIssue({
         code: 'custom',
         path: ['rewards', 'places', index, 'place'],
-        message: 'Every place of the top can have one reward',
+        message: goals
+          ? 'A goals event has one reward, for everyone who reaches them'
+          : 'Every place of the top can have one reward',
       });
     }
     places.add(reward.place);
@@ -440,7 +384,7 @@ export const eventSchema = z.object({
   state: z.enum(EVENT_STATES),
   startsAt: z.string(),
   endsAt: z.string(),
-  metric: metricSchema,
+  metric: metricSchema.optional(),
   scoring: scoringSchema,
   participants: participantsSchema,
   rewards: rewardsViewSchema,
@@ -474,10 +418,26 @@ export const rewardStatusSchema = z.object({
 });
 export type RewardStatus = z.infer<typeof rewardStatusSchema>;
 
+/** The progress of a player in a goals event. */
+export const progressRowSchema = z.object({
+  uuid: z.string(),
+  name: z.string(),
+  /** Whether all the targets are reached. */
+  done: z.boolean(),
+  /** The order of those who reached them, 1 for the first; null while not done. */
+  place: z.number().int().nullable(),
+  completedAt: z.string().nullable(),
+  targets: z.array(z.object({ label: z.string(), value: z.number(), amount: z.number() })),
+});
+export type ProgressRow = z.infer<typeof progressRowSchema>;
+
 export const eventDetailSchema = z.object({
   event: eventSchema,
   /** The top, from the last count (`countedAt`); frozen once the competition is over. */
   standings: z.array(standingSchema),
+  /** Goals events: the players with progress, those who are done first. */
+  progress: z.array(progressRowSchema),
+  completedCount: z.number().int(),
   countedAt: z.string().nullable(),
   rewards: z.array(rewardStatusSchema),
   /** What the server can do, so that the page can say what will not work. */

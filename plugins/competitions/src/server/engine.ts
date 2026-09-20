@@ -4,12 +4,21 @@ import {
   announcementKey,
   eventConfigSchema,
   standingSchema,
+  type Metric,
+  type ProgressRow,
+  type Rewards,
   type CompetitionEvent,
   type EventConfig,
   type EventState,
   type Standing,
 } from '../shared.js';
-import { renderAnnouncement, renderResults } from '../render.js';
+import {
+  goalView,
+  renderAnnouncement,
+  renderCompletion,
+  renderResults,
+  type GoalView,
+} from '../render.js';
 import type { PlayerDirectory } from './players.js';
 import { REWARD_KIND, rewardPayloadSchema, type RewardPayload } from './rewards.js';
 import type { Sampler } from './sampler.js';
@@ -34,6 +43,15 @@ const INSERT_CHUNK = 200;
 
 const iso = (time: number) => new Date(Number(time)).toISOString();
 const resultsSchema = z.array(standingSchema);
+
+/** The metrics an event reads: its one metric, or the metric of each of its targets. */
+export function metricsOf(config: EventConfig): Metric[] {
+  if (config.scoring.kind === 'targets') return config.scoring.targets.map(({ metric }) => metric);
+  return config.metric === undefined ? [] : [config.metric];
+}
+
+/** The standings of a goals event keep this many of those who reached the targets. */
+const MAX_STANDINGS_STORED = 200;
 
 /** What the stored config of a row says. */
 export function configOf(row: EventRow): EventConfig {
@@ -212,6 +230,7 @@ export class CompetitionEngine {
             announcement.text,
             await this.standings(row),
             now,
+            await this.goalViewOf(row),
           );
           if (lines.length > 0) await this.ctx.chat.broadcast(row.server_id, lines);
         } catch (err) {
@@ -252,20 +271,35 @@ export class CompetitionEngine {
   async #begin(row: EventRow): Promise<void> {
     const config = configOf(row);
     await this.#flush(row.server_id);
-    const counters = await this.sampler.measure(row.server_id, row.id, config.metric, {
+    const counters = await this.sampler.measureMany(row.server_id, row.id, metricsOf(config), {
       fresh: true,
     });
     const now = Date.now();
     await this.db.transaction().execute(async (trx) => {
       await trx.deleteFrom('comp_baselines').where('event_id', '=', row.id).execute();
-      const values = [...counters]
-        .filter(([, value]) => value > 0)
-        .map(([uuid, value]) => ({ event_id: row.id, uuid, value }));
-      for (let at = 0; at < values.length; at += INSERT_CHUNK) {
-        await trx
-          .insertInto('comp_baselines')
-          .values(values.slice(at, at + INSERT_CHUNK))
-          .execute();
+      await trx.deleteFrom('comp_target_baselines').where('event_id', '=', row.id).execute();
+      if (config.scoring.kind === 'targets') {
+        const targetValues = [...counters].flatMap(([uuid, totals]) =>
+          totals.flatMap((value, target) =>
+            value > 0 ? [{ event_id: row.id, uuid, target, value }] : [],
+          ),
+        );
+        for (let at = 0; at < targetValues.length; at += INSERT_CHUNK) {
+          await trx
+            .insertInto('comp_target_baselines')
+            .values(targetValues.slice(at, at + INSERT_CHUNK))
+            .execute();
+        }
+      } else {
+        const values = [...counters]
+          .filter(([, totals]) => (totals[0] ?? 0) > 0)
+          .map(([uuid, totals]) => ({ event_id: row.id, uuid, value: totals[0] ?? 0 }));
+        for (let at = 0; at < values.length; at += INSERT_CHUNK) {
+          await trx
+            .insertInto('comp_baselines')
+            .values(values.slice(at, at + INSERT_CHUNK))
+            .execute();
+        }
       }
       await trx
         .updateTable('comp_events')
@@ -301,7 +335,30 @@ export class CompetitionEngine {
 
   async #count(row: EventRow, options: { fresh?: boolean }): Promise<Standing[]> {
     const config = configOf(row);
-    const counters = await this.sampler.measure(row.server_id, row.id, config.metric, options);
+    return config.scoring.kind === 'targets'
+      ? this.#countGoals(row, config, options)
+      : this.#countRanking(row, config, options);
+  }
+
+  async #excluded(row: EventRow, config: EventConfig): Promise<Set<string>> {
+    const excluded = new Set(config.participants.excluded.map(({ uuid }) => uuid));
+    if (config.participants.excludeOperators) {
+      for (const uuid of await this.directory.operators(row.server_id)) excluded.add(uuid);
+    }
+    return excluded;
+  }
+
+  async #countRanking(
+    row: EventRow,
+    config: EventConfig,
+    options: { fresh?: boolean },
+  ): Promise<Standing[]> {
+    const metric = config.metric;
+    const totals =
+      metric === undefined
+        ? new Map<string, number[]>()
+        : await this.sampler.measureMany(row.server_id, row.id, [metric], options);
+    const counters = new Map([...totals].map(([uuid, values]) => [uuid, values[0] ?? 0]));
     const baselines = new Map(
       (
         await this.db
@@ -311,10 +368,7 @@ export class CompetitionEngine {
           .execute()
       ).map(({ uuid, value }) => [uuid, Number(value)]),
     );
-    const excluded = new Set(config.participants.excluded.map(({ uuid }) => uuid));
-    if (config.participants.excludeOperators) {
-      for (const uuid of await this.directory.operators(row.server_id)) excluded.add(uuid);
-    }
+    const excluded = await this.#excluded(row, config);
     const names = await this.directory.names(row.server_id);
     const before = new Map(
       (
@@ -361,9 +415,220 @@ export class CompetitionEngine {
     return standings;
   }
 
+  /**
+   * Goals: how far every player is on every target since the start; those who have reached all of
+   * them for the first time are recorded, rewarded and announced.
+   */
+  async #countGoals(
+    row: EventRow,
+    config: EventConfig,
+    options: { fresh?: boolean },
+  ): Promise<Standing[]> {
+    if (config.scoring.kind !== 'targets') return [];
+    const { targets } = config.scoring;
+    const totals = await this.sampler.measureMany(
+      row.server_id,
+      row.id,
+      metricsOf(config),
+      options,
+    );
+    const baselines = new Map(
+      (
+        await this.db
+          .selectFrom('comp_target_baselines')
+          .select(['uuid', 'target', 'value'])
+          .where('event_id', '=', row.id)
+          .execute()
+      ).map(({ uuid, target, value }) => [`${uuid}:${Number(target)}`, Number(value)]),
+    );
+    const excluded = await this.#excluded(row, config);
+    const names = await this.directory.names(row.server_id);
+    const completed = new Map(
+      (
+        await this.db
+          .selectFrom('comp_completions')
+          .selectAll()
+          .where('event_id', '=', row.id)
+          .execute()
+      ).map((completion) => [completion.uuid, completion]),
+    );
+
+    const now = Date.now();
+    const progress: CompetitionsTables['comp_progress'][] = [];
+    const reached: { uuid: string; name: string }[] = [];
+    for (const [uuid, values] of totals) {
+      if (excluded.has(uuid)) continue;
+      const grown = targets.map((_, index) =>
+        Math.max(0, (values[index] ?? 0) - (baselines.get(`${uuid}:${index}`) ?? 0)),
+      );
+      if (grown.every((value) => value === 0)) continue;
+      const name = names.get(uuid) ?? uuid.slice(0, 8);
+      grown.forEach((value, target) =>
+        progress.push({ event_id: row.id, uuid, target, name, value }),
+      );
+      if (
+        !completed.has(uuid) &&
+        targets.every((target, index) => (grown[index] ?? 0) >= target.amount)
+      ) {
+        reached.push({ uuid, name });
+      }
+    }
+    // Those who reached the goals at this count are ordered by name: the files cannot tell more.
+    reached.sort((a, b) => a.name.localeCompare(b.name) || (a.uuid < b.uuid ? -1 : 1));
+    const fresh = reached.map((player, index) => ({
+      event_id: row.id,
+      uuid: player.uuid,
+      name: player.name,
+      place: completed.size + index + 1,
+      completed_at: now,
+    }));
+
+    await this.db.transaction().execute(async (trx) => {
+      await trx.deleteFrom('comp_progress').where('event_id', '=', row.id).execute();
+      for (let at = 0; at < progress.length; at += INSERT_CHUNK) {
+        await trx
+          .insertInto('comp_progress')
+          .values(progress.slice(at, at + INSERT_CHUNK))
+          .execute();
+      }
+      for (let at = 0; at < fresh.length; at += INSERT_CHUNK) {
+        await trx
+          .insertInto('comp_completions')
+          .values(fresh.slice(at, at + INSERT_CHUNK))
+          .execute();
+      }
+      await trx
+        .updateTable('comp_events')
+        .set({ counted_at: now })
+        .where('id', '=', row.id)
+        .execute();
+    });
+
+    const standings = await this.standings(row, MAX_STANDINGS_STORED);
+    if (fresh.length > 0) {
+      await this.#enqueueRewards(row, config, standings, () => config.rewards.places[0]);
+      await this.#announceCompletions(row, config, fresh, completed.size + fresh.length);
+    }
+    return standings;
+  }
+
+  /** Tells everyone who has just reached the goals. */
+  async #announceCompletions(
+    row: EventRow,
+    config: EventConfig,
+    fresh: readonly { name: string; place: number }[],
+    completed: number,
+  ): Promise<void> {
+    if (!config.messages.announceCompletions) return;
+    for (const player of fresh) {
+      try {
+        const lines = renderCompletion(
+          { name: row.name, messages: config.messages },
+          player.name,
+          player.place,
+          completed,
+        );
+        if (lines.length > 0) await this.ctx.chat.broadcast(row.server_id, lines);
+      } catch (err) {
+        this.ctx.logger.debug('announcing a completion failed', { error: String(err) });
+      }
+    }
+  }
+
+  /** Goals: the players with progress, those who have reached all the targets first. */
+  async #progressRows(row: EventRow, config: EventConfig): Promise<ProgressRow[]> {
+    if (config.scoring.kind !== 'targets') return [];
+    const { targets } = config.scoring;
+    const stored = await this.db
+      .selectFrom('comp_progress')
+      .selectAll()
+      .where('event_id', '=', row.id)
+      .execute();
+    const completions = new Map(
+      (
+        await this.db
+          .selectFrom('comp_completions')
+          .selectAll()
+          .where('event_id', '=', row.id)
+          .execute()
+      ).map((completion) => [completion.uuid, completion]),
+    );
+    const byPlayer = new Map<string, ProgressRow>();
+    const row_ = (uuid: string, name: string): ProgressRow => {
+      const known = byPlayer.get(uuid);
+      if (known !== undefined) return known;
+      const completion = completions.get(uuid);
+      const created: ProgressRow = {
+        uuid,
+        name,
+        done: completion !== undefined,
+        place: completion === undefined ? null : Number(completion.place),
+        completedAt: completion === undefined ? null : iso(completion.completed_at),
+        targets: targets.map((target) => ({
+          label: target.label,
+          value: 0,
+          amount: target.amount,
+        })),
+      };
+      byPlayer.set(uuid, created);
+      return created;
+    };
+    for (const entry of stored) {
+      const target = row_(entry.uuid, entry.name).targets[Number(entry.target)];
+      if (target !== undefined) target.value = Number(entry.value);
+    }
+    // Someone who reached the targets stays on the list, even when they are excluded now.
+    for (const completion of completions.values()) row_(completion.uuid, completion.name);
+    const fraction = (progress: ProgressRow) =>
+      progress.targets.reduce((sum, target) => sum + Math.min(target.value / target.amount, 1), 0) /
+      Math.max(progress.targets.length, 1);
+    return [...byPlayer.values()].sort(
+      (a, b) =>
+        Number(b.done) - Number(a.done) ||
+        (a.place ?? 0) - (b.place ?? 0) ||
+        fraction(b) - fraction(a) ||
+        a.name.localeCompare(b.name),
+    );
+  }
+
+  /** Goals: the players with progress and how many reached all the targets. */
+  async progress(row: EventRow, limit = 25): Promise<{ rows: ProgressRow[]; completed: number }> {
+    const rows = await this.#progressRows(row, configOf(row));
+    return { rows: rows.slice(0, limit), completed: rows.filter(({ done }) => done).length };
+  }
+
+  /** What the texts of a goals event say about a player; undefined for other events. */
+  async goalViewOf(row: EventRow, viewer?: string): Promise<GoalView | undefined> {
+    const config = configOf(row);
+    if (config.scoring.kind !== 'targets') return undefined;
+    const rows = await this.#progressRows(row, config);
+    const own =
+      viewer === undefined
+        ? undefined
+        : rows.find((entry) => entry.name.toLowerCase() === viewer.toLowerCase());
+    return goalView(config.scoring.targets, own, rows.filter(({ done }) => done).length);
+  }
+
   /** The standings of the last count, or the frozen ones of a competition that is over. */
   async standings(row: EventRow, limit = 25): Promise<Standing[]> {
     if (row.results !== null) return resultsSchema.parse(JSON.parse(row.results)).slice(0, limit);
+    const config = configOf(row);
+    if (config.scoring.kind === 'targets') {
+      // Goals: those who reached all the targets, in order.
+      const completions = await this.db
+        .selectFrom('comp_completions')
+        .selectAll()
+        .where('event_id', '=', row.id)
+        .orderBy('place')
+        .limit(limit)
+        .execute();
+      return completions.map((completion) => ({
+        place: Number(completion.place),
+        uuid: completion.uuid,
+        name: completion.name,
+        score: config.scoring.kind === 'targets' ? config.scoring.targets.length : 0,
+      }));
+    }
     const scores = await this.db
       .selectFrom('comp_scores')
       .selectAll()
@@ -383,7 +648,9 @@ export class CompetitionEngine {
   async #finish(row: EventRow): Promise<void> {
     const config = configOf(row);
     await this.#flush(row.server_id);
-    const standings = (await this.count(row, { fresh: true })).slice(0, config.participants.top);
+    const counted = await this.count(row, { fresh: true });
+    const standings =
+      config.scoring.kind === 'targets' ? counted : counted.slice(0, config.participants.top);
     await this.#update(row.id, {
       state: 'finishing',
       results: JSON.stringify(standings),
@@ -401,10 +668,15 @@ export class CompetitionEngine {
     }
     const config = configOf(row);
     const standings = resultsSchema.parse(JSON.parse(row.results));
-    await this.#enqueueRewards(row, config, standings);
+    await this.#enqueueRewards(row, config, standings, (standing) =>
+      config.scoring.kind === 'targets'
+        ? config.rewards.places[0]
+        : config.rewards.places.find(({ place }) => place === standing.place),
+    );
     const now = Date.now();
     await this.db.transaction().execute(async (trx) => {
       await trx.deleteFrom('comp_baselines').where('event_id', '=', row.id).execute();
+      await trx.deleteFrom('comp_target_baselines').where('event_id', '=', row.id).execute();
       await trx
         .updateTable('comp_events')
         .set({ state: 'finished', finished_at: now, problem: null, updated_at: now })
@@ -415,7 +687,7 @@ export class CompetitionEngine {
     if (config.messages.announceResults) {
       const event = { ...toEvent({ ...row, state: 'finished' }) };
       try {
-        const lines = renderResults(event, standings, now);
+        const lines = renderResults(event, standings, now, await this.goalViewOf(row));
         if (lines.length > 0) await this.ctx.chat.broadcast(row.server_id, lines);
       } catch (err) {
         this.ctx.logger.debug('announcing the results failed', { error: String(err) });
@@ -428,6 +700,7 @@ export class CompetitionEngine {
     row: EventRow,
     config: EventConfig,
     standings: readonly Standing[],
+    rewardOf: (standing: Standing) => Rewards['places'][number] | undefined,
   ): Promise<void> {
     const existing = new Set(
       (await this.ctx.playerTasks.list({ serverId: row.server_id, kind: REWARD_KIND }))
@@ -437,7 +710,7 @@ export class CompetitionEngine {
         .map((payload) => `${payload.place}:${payload.index}`),
     );
     for (const standing of standings) {
-      const reward = config.rewards.places.find(({ place }) => place === standing.place);
+      const reward = rewardOf(standing);
       if (reward === undefined) continue;
       for (const [index, command] of reward.commands.entries()) {
         if (existing.has(`${standing.place}:${index}`)) continue;

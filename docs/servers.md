@@ -238,12 +238,25 @@ many blocks each player mines — the weekly top three wood cutters, for example
 - An event has a **period**: it starts and ends at the date and time you pick, in a time zone you
   choose. The editor offers 10 minutes, 30 minutes, 2 days, 1 week and 2 weeks as shortcuts; the end can be any moment. An
   event that starts in the past begins at once.
-- **What is counted** is either the blocks mined or the fish caught (the game's own counter of
-  fishing catches, which cannot be farmed by placing and breaking blocks). Blocks are picked from
-  groups of blocks (wood, stone, ores, earth) and any block ids
-  of your own, where `*` stands for any part of a name (`minecraft:cherry_log`, `*_log`). The score
-  of a player is what their counter grew by from the start to the end: mining at the start and at
-  the end is read from the statistics of the world, so no plugin or mod is needed.
+- **What is counted** is one of three things: the blocks mined; the fish caught (the game's own
+  counter of fishing catches); or **another statistic** of the game: the items picked up, the mobs
+  killed, the items crafted, used, broken or dropped, what killed the player, and the general
+  counters such as deaths and animals bred. Blocks and items are picked from groups and any ids of
+  your own, where `*` stands for any part of a name (`minecraft:cherry_log`, `*_log`). Groups of
+  blocks: wood, stone, ores, earth and the blocks of biomes (cherry grove, pale garden, mangrove
+  swamp, jungle, desert and badlands, snowy biomes, mushroom fields, Nether forests and terrain, deep
+  dark, caves, ocean, the End, mountains). Groups of statistics: ore drops (raw copper, diamonds…),
+  crops, hostile mobs, undead, farm animals, bosses and some counters. The score of a player is what
+  their counter grew by from the start to the end. It is read from the statistics of the world, so
+  no plugin or mod is needed.
+- **Goals** are another kind of event: instead of a top, every player has goals such as "20 spruce
+  logs" and "4 ore drops", each counting something of its own (any of the above), and everyone who
+  reaches all of them gets the reward, once, as soon as a count sees it. Players ask `!goal` (the
+  chat command of the event) and see their own progress, "✓ Spruce logs 20/20", and the event page
+  shows the progress of every player. The order of those who reached the goals is the order of the
+  counts and, within one count, by name: the files cannot tell more, so this is not a race. Blocks
+  that drop themselves (logs, dirt) can be placed and broken again to reach a goal; goals on items
+  that only drop from ores (raw copper, diamonds) cannot be reached that way.
 - **Who takes part**: the top `N` places count. Operators (from `ops.json`) can be left out with a
   checkbox, and single players can be left out by picking them from the players Outpost knows.
   Of two players with one score the one who reached it first is ahead.
@@ -285,9 +298,10 @@ many blocks each player mines — the weekly top three wood cutters, for example
   commands, so setting them needs the right to run console commands (`console.execute`) besides
   managing events. Creating, changing, cancelling and deleting events and rewards are written to the
   audit log.
-- Blocks are counted as the game writes them as `mined`: breaking a block counts, whatever it is
-  broken with, and so does a block that was placed and broken again (with silk touch, for
-  example). Outpost cannot tell these apart; the fish caught do not have this problem.
+- Limits of the statistics: breaking a block counts, whatever it is broken with, and so does a block
+  that was placed and broken again (with silk touch, for example); Outpost cannot tell these apart.
+  The fish caught and the drops of ores, which silk touch does not give, do not have this problem,
+  but an item that is dropped and picked up again counts every time.
 
 ## Roles
 
