@@ -19,7 +19,7 @@
     "@outpost/ui": "workspace:*",
     "@outpost/web-plugin-api": "workspace:*",
     "croner": "^10.0.1",
-    "cronstrue": "^3.26.0",
+    "cronstrue": "^3.27.0",
     "zod": "^4.6.2"
   },
   "peerDependencies": {
